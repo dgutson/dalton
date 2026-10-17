@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Dalton — LED colour namer</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#14181d; --line:#2a313a; --fg:#eef2f6; --dim:#9aa6b2;
+    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; user-select:none}
+  #stage{position:fixed;inset:0;display:flex;flex-direction:column}
+  #camwrap{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+  video{width:100%;height:100%;object-fit:cover;display:block}
+  #reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.6), inset 0 0 0 2px rgba(0,0,0,.4);
+    pointer-events:none;width:120px;height:120px}
+  #reticle::before,#reticle::after{content:"";position:absolute;background:rgba(255,255,255,.85)}
+  #reticle::before{left:50%;top:-10px;bottom:-10px;width:1px;margin-left:-.5px}
+  #reticle::after{top:50%;left:-10px;right:-10px;height:1px;margin-top:-.5px}
+  #frozen{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#fff;color:#000;
+    font-weight:800;font-size:13px;letter-spacing:.14em;padding:5px 12px;border-radius:999px;display:none}
+  #frozen.on{display:block}
+  #toolbar{position:absolute;top:10px;right:10px;display:flex;gap:8px}
+  .tbtn{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(10,12,15,.72);
+    color:var(--fg);font-size:19px;display:grid;place-items:center;backdrop-filter:blur(6px)}
+  .tbtn.off{color:#6b7682}
+
+  #panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:9px}
+  #nameRow{display:flex;align-items:center;gap:12px}
+  #swatch{width:54px;height:54px;border-radius:12px;border:2px solid var(--line);flex:none;background:#000}
+  #name{font-size:42px;line-height:1;font-weight:800;letter-spacing:.02em;flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #name.small{font-size:27px}
+  #note{font-size:14px;line-height:1.3;color:var(--warn);min-height:18px;font-weight:600}
+  #note.ok{color:var(--ok)} #note.bad{color:var(--bad)} #note.dim{color:var(--dim);font-weight:500}
+  #bar{width:100%;height:42px;display:block;border-radius:8px;border:1px solid var(--line)}
+  #stats{font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);white-space:pre}
+
+  #sheet{position:fixed;inset:0;background:rgba(5,7,9,.96);z-index:20;display:none;
+    flex-direction:column;padding:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #sheet.on{display:flex}
+  #sheet h2{margin:4px 0 2px;font-size:17px}
+  #sheet h3{margin:16px 0 6px;font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.09em}
+  .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .row .lab{flex:1;font-size:15px}
+  .row .val{font:13px ui-monospace,Menlo,monospace;color:var(--dim);min-width:52px;text-align:right}
+  .sbtn{min-width:44px;height:40px;border-radius:10px;border:1px solid var(--line);background:#1b2128;color:var(--fg);
+    font-size:16px;font-weight:700;padding:0 12px}
+  .sbtn.sel{background:#2d6cdf;border-color:#2d6cdf}
+  .wide{width:100%;height:48px;margin-top:14px;font-size:16px}
+  input[type=range]{flex:1;accent-color:#2d6cdf}
+  p.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:6px 0 0}
+
+  #start{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
+  #start h1{font-size:30px;margin:0}
+  #start p{color:var(--dim);font-size:15px;line-height:1.55;margin:0;max-width:30em}
+  #go{padding:18px 44px;font-size:19px;font-weight:700;border-radius:14px;border:0;background:#2d6cdf;color:#fff}
+  #err{color:var(--bad);font-size:14px;max-width:30em}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="camwrap">
+    <video id="video" playsinline autoplay muted></video>
+    <div id="reticle"></div>
+    <div id="frozen">FROZEN</div>
+    <div id="toolbar">
+      <button class="tbtn" id="bSpeak" title="speech">&#128266;</button>
+      <button class="tbtn" id="bSet" title="settings">&#9881;</button>
+    </div>
+  </div>
+  <div id="panel">
+    <div id="nameRow">
+      <div id="swatch"></div>
+      <div id="name">—</div>
+    </div>
+    <div id="note" class="dim">Point the circle at one LED. Tap the image to freeze.</div>
+    <canvas id="bar" width="720" height="84"></canvas>
+    <div id="stats"></div>
+  </div>
+</div>
+
+<div id="sheet">
+  <h2>Settings</h2>
+
+  <h3>Sample circle</h3>
+  <div class="row">
+    <div class="lab">Size</div>
+    <button class="sbtn" data-size="0.05">S</button>
+    <button class="sbtn" data-size="0.10">M</button>
+    <button class="sbtn" data-size="0.18">L</button>
+  </div>
+  <p class="hint">Small = one LED. Large = diffuse or distant sources.</p>
+
+  <h3>Camera</h3>
+  <div class="row" id="rowExp">
+    <div class="lab">Exposure</div>
+    <input type="range" id="expR"><div class="val" id="expV">—</div>
+  </div>
+  <div class="row" id="rowWb">
+    <div class="lab">Lock white balance</div>
+    <button class="sbtn" id="wbBtn">auto</button>
+  </div>
+  <p class="hint">Lower exposure if the LED core keeps blowing out to white. Locking white balance stops the camera from cancelling a strong colour cast.</p>
+
+  <h3>Hue boundaries (°)</h3>
+  <div id="bounds"></div>
+  <p class="hint">Point at a known LED, read the measured hue in the stats line, then nudge the neighbouring boundary until it names it correctly. Saved on this phone.</p>
+  <button class="sbtn wide" id="resetB">Reset boundaries to defaults</button>
+  <button class="sbtn wide" id="closeS" style="background:#2d6cdf;border-color:#2d6cdf">Done</button>
+</div>
+
+<div id="start">
+  <h1>Dalton</h1>
+  <p>Names the colour of an LED from the camera. Works offline; nothing leaves the phone.</p>
+  <button id="go">Start camera</button>
+  <div id="err"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- colour bands ---------- */
+const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
+const ABBR   = ['R','A','Y','L','G','C','B','V','M'];
+const SWATCH = ['#ff2b1f','#ff8c00','#ffe000','#b4ff00','#00e05a','#00e5e5','#2b6bff','#9b4dff','#ff3fa4'];
+const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];   // band i spans bounds[i] -> bounds[i+1]
+let BOUNDS = load('dalton.bounds', DEF_BOUNDS).slice();
+
+function load(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
+function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+const norm = a => ((a % 360) + 360) % 360;
+const cycFwd = (from,to) => norm(to - from);                 // distance going forwards
+const cycAbs = (a,b) => { const d = Math.abs(norm(a-b)); return Math.min(d, 360-d); };
+
+function bandOf(h){
+  h = norm(h);
+  for(let i=0;i<9;i++){
+    const span = cycFwd(BOUNDS[i], BOUNDS[(i+1)%9]);
+    if(cycFwd(BOUNDS[i], h) < span) return i;
+  }
+  return 0;
+}
+
+/* ---------- sampling + analysis ---------- */
+const MINSAT = 0.15, MINSAT2 = 0.05, DARK = 28, CLIP = 250;
+
+function analyse(data, S, minsat){
+  const r0 = S/2, rr = r0*r0, c = r0 - 0.5;
+  let n=0, nDark=0, nClip=0, nGray=0, nUse=0;
+  let sx=0, sy=0, wsum=0, satSum=0, valSum=0, valAll=0;
+
+  for(let y=0;y<S;y++){
+    const dy = y - c;
+    for(let x=0;x<S;x++){
+      const dx = x - c;
+      if(dx*dx + dy*dy > rr) continue;
+      const i = (y*S + x) << 2;
+      const R=data[i], G=data[i+1], B=data[i+2];
+      n++;
+      const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+      const mn = R<G ? (R<B?R:B) : (G<B?G:B);
+      valAll += mx;
+      if(mx < DARK){ nDark++; continue; }
+      // Any clipped channel biases hue: the dominant channel caps at 255 while the
+      // others keep climbing, dragging red towards amber. Drop these outright.
+      if(mx >= CLIP){ nClip++; continue; }
+      const d = mx - mn, s = d / mx;
+      if(s < minsat){ nGray++; continue; }
+
+      let h;
+      if(mx===R)      h = 60*((G-B)/d);
+      else if(mx===G) h = 60*((B-R)/d + 2);
+      else            h = 60*((R-G)/d + 4);
+      h = norm(h) * Math.PI/180;
+
+      sx += s*Math.cos(h); sy += s*Math.sin(h); wsum += s;
+      satSum += s; valSum += mx; nUse++;
+    }
+  }
+  const conc = wsum>0 ? Math.hypot(sx,sy)/wsum : 0;   // 1 = every pixel agrees on hue
+  return { n, nDark, nClip, nGray, nUse, conc,
+           minUse: Math.max(10, Math.round(n*0.002)),
+           vx: wsum>0?sx/wsum:0, vy: wsum>0?sy/wsum:0,
+           sat: nUse? satSum/nUse : 0, val: nUse? valSum/nUse : 0,
+           valAll: n? valAll/n : 0 };
+}
+
+/* ---------- state ---------- */
+const video=$('video'), cam=$('camwrap'), ret=$('reticle'), panel=$('panel');
+const elName=$('name'), elNote=$('note'), elSwatch=$('swatch'), elStats=$('stats'), bar=$('bar');
+const bctx = bar.getContext('2d');
+const sc = document.createElement('canvas');
+const sctx = sc.getContext('2d', {willReadFrequently:true});
+
+let stream=null, track=null, caps={}, frozen=false, speakOn=load('dalton.speak',true);
+let sampleFactor = load('dalton.size', 0.10);
+let ema=null, stableName='', stableCount=0, spokenName='', wakeLock=null;
+
+function $(id){ return document.getElementById(id); }
+
+/* ---------- camera ---------- */
+async function start(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+  }catch(e){
+    $('err').textContent = 'Camera failed: ' + e.name + ' — ' + e.message; return;
+  }
+  video.srcObject = stream;
+  await video.play().catch(()=>{});
+  track = stream.getVideoTracks()[0];
+  try{ caps = track.getCapabilities ? track.getCapabilities() : {}; }catch(e){ caps={}; }
+  buildCamControls();
+  $('start').style.display='none';
+  try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  sizeReticle();
+  requestAnimationFrame(loop);
+}
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState==='visible' && !wakeLock)
+    try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+});
+
+function sizeReticle(){
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw) return;
+  const S = Math.max(16, Math.round(Math.min(vw,vh)*sampleFactor));
+  const scale = Math.max(cam.clientWidth/vw, cam.clientHeight/vh);  // object-fit: cover
+  const px = Math.round(S*scale);
+  ret.style.width = px+'px'; ret.style.height = px+'px';
+}
+addEventListener('resize', sizeReticle);
+
+/* ---------- main loop ---------- */
+let last=0;
+function loop(t){
+  requestAnimationFrame(loop);
+  if(frozen || t-last < 150) return;                 // ~6-7 fps is plenty
+  last = t;
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw) return;
+  const S = Math.max(16, Math.round(Math.min(vw,vh)*sampleFactor));
+  if(sc.width!==S){ sc.width=sc.height=S; sizeReticle(); }
+  sctx.drawImage(video, (vw-S)>>1, (vh-S)>>1, S, S, 0, 0, S, S);
+  let img; try{ img = sctx.getImageData(0,0,S,S); }catch(e){ return; }
+  const a = analyse(img.data, S, MINSAT);
+  // only pay for the low-saturation second pass when the strict pass found nothing
+  const b = (a.nUse >= a.minUse) ? null : analyse(img.data, S, MINSAT2);
+  render(a, b);
+}
+
+function render(a, b){
+  let label, cls='dim', note='', swatch='#000', hue=null, band=-1, washed=false, src=null;
+
+  if(a.nUse >= a.minUse) src = a;
+  else if(b && b.nUse >= b.minUse && b.conc >= 0.90 && b.sat >= 0.09){ src = b; washed = true; }
+
+  if(src){
+    // smooth the hue vector so the reading does not jitter frame to frame
+    if(!ema) ema = {x:src.vx, y:src.vy};
+    else { ema.x = ema.x*0.5 + src.vx*0.5; ema.y = ema.y*0.5 + src.vy*0.5; }
+    hue  = norm(Math.atan2(ema.y, ema.x)*180/Math.PI);
+    band = bandOf(hue);
+    label  = NAMES[band];
+    swatch = SWATCH[band];
+
+    const nb = nearestBoundary(hue);
+    if(washed){ note = 'WASHED OUT — only a faint tint survives, lower exposure to confirm'; cls=''; }
+    else if(src.conc < 0.80){ note = 'UNCERTAIN — hue is scattered, steady the camera'; cls=''; }
+    else if(nb.dist < 6){
+      note = 'BORDERLINE — ' + nb.dist.toFixed(0) + '° from the '
+           + NAMES[nb.lo] + '/' + NAMES[nb.hi] + ' edge'; cls='';
+    } else { note = 'confident'; cls='ok'; }
+    if(!washed && src.nClip/src.n > 0.5) note += ' · reading the fringe, core is clipped';
+  } else {
+    ema = null;
+    const f = b || a;
+    if(f.nUse >= f.minUse && f.sat < 0.09 && a.nClip/a.n > 0.20){
+      label='WHITE'; note='Bright with no hue — a white LED'; cls=''; swatch='#f2f2f2';
+    } else if(a.nClip/a.n > 0.25){
+      label='TOO BRIGHT'; note='Move back, or lower exposure in settings'; cls='bad';
+    } else if(a.nDark/a.n > 0.80){
+      label='OFF / DARK'; note='Nothing emitting inside the circle'; cls='bad';
+    } else if(a.valAll > 90){
+      label='WHITE'; note='Bright but no hue — white, or washed out'; cls=''; swatch='#f2f2f2';
+    } else {
+      label='NO CLEAR COLOUR'; note='Fill more of the circle with the LED'; cls='bad';
+    }
+  }
+
+  const st = src || a;
+  elName.textContent = label;
+  elName.classList.toggle('small', label.length > 9);
+  elNote.textContent = note;
+  elNote.className = cls;
+  elSwatch.style.background = swatch;
+
+  elStats.textContent =
+    (hue===null ? 'hue    —   ' : 'hue ' + hue.toFixed(0).padStart(3) + '°  ')
+    + 'sat ' + (st.sat*100).toFixed(0).padStart(3) + '%  val ' + st.val.toFixed(0).padStart(3)
+    + '  agree ' + (st.conc*100).toFixed(0).padStart(3) + '%\n'
+    + 'px  use ' + st.nUse + '  clipped ' + a.nClip + '  gray ' + a.nGray + '  dark ' + a.nDark;
+
+  drawBar(hue, band);
+  maybeSpeak(label, cls);
+}
+
+function nearestBoundary(h){
+  let best=1e9, idx=0;
+  for(let i=0;i<9;i++){ const d=cycAbs(h, BOUNDS[i]); if(d<best){best=d; idx=i;} }
+  return { dist:best, lo:(idx+8)%9, hi:idx };
+}
+
+/* ---------- hue bar: position-encoded, readable without colour vision ---------- */
+function drawBar(hue, band){
+  const W=bar.width, H=bar.height, O=BOUNDS[0];      // bar starts at the red boundary
+  bctx.clearRect(0,0,W,H);
+  const xOf = h => cycFwd(O, h)/360*W;
+  for(let i=0;i<9;i++){
+    const x0=xOf(BOUNDS[i]), span=cycFwd(BOUNDS[i],BOUNDS[(i+1)%9])/360*W;
+    bctx.fillStyle = SWATCH[i];
+    bctx.globalAlpha = (i===band) ? 1 : 0.34;
+    bctx.fillRect(x0, 0, span, H*0.62);
+    bctx.globalAlpha = 1;
+    bctx.fillStyle = (i===band) ? '#fff' : '#7d8894';
+    bctx.font = (i===band ? 'bold ' : '') + '22px system-ui,sans-serif';
+    bctx.textAlign='center'; bctx.textBaseline='bottom';
+    if(span > 22) bctx.fillText(ABBR[i], x0+span/2, H);
+  }
+  if(hue!==null){
+    const x = xOf(hue);
+    bctx.strokeStyle='#000'; bctx.lineWidth=6; bctx.beginPath();
+    bctx.moveTo(x,0); bctx.lineTo(x,H*0.62); bctx.stroke();
+    bctx.strokeStyle='#fff'; bctx.lineWidth=2.5; bctx.beginPath();
+    bctx.moveTo(x,0); bctx.lineTo(x,H*0.62); bctx.stroke();
+  }
+}
+
+/* ---------- speech ---------- */
+function maybeSpeak(label, cls){
+  if(label === stableName) stableCount++; else { stableName = label; stableCount = 1; }
+  if(stableCount !== 3) return;                      // fire once, after 3 agreeing frames
+  if(label === spokenName) return;
+  spokenName = label;
+  say(cls === 'ok' ? label : label + ', uncertain');
+}
+function say(text){
+  if(!speakOn || !window.speechSynthesis) return;
+  try{ speechSynthesis.cancel();
+       const u = new SpeechSynthesisUtterance(text.toLowerCase());
+       u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
+}
+
+/* ---------- interaction ---------- */
+cam.addEventListener('click', ()=>{
+  frozen = !frozen;
+  $('frozen').classList.toggle('on', frozen);
+  if(frozen){ spokenName=''; say(elName.textContent); }
+});
+$('bSpeak').addEventListener('click', e=>{
+  e.stopPropagation(); speakOn=!speakOn; save('dalton.speak',speakOn);
+  $('bSpeak').classList.toggle('off', !speakOn);
+});
+$('bSet').addEventListener('click', e=>{ e.stopPropagation(); $('sheet').classList.add('on'); });
+$('closeS').addEventListener('click', ()=> $('sheet').classList.remove('on'));
+$('go').addEventListener('click', ()=>{ say('ready'); start(); });
+
+document.querySelectorAll('[data-size]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    sampleFactor = parseFloat(b.dataset.size); save('dalton.size', sampleFactor);
+    markSizes(); sc.width = 0; sizeReticle();
+  });
+});
+function markSizes(){
+  document.querySelectorAll('[data-size]').forEach(b=>
+    b.classList.toggle('sel', Math.abs(parseFloat(b.dataset.size)-sampleFactor) < 1e-6));
+}
+
+/* ---------- camera controls ---------- */
+function buildCamControls(){
+  const r = caps.exposureCompensation;
+  if(r){
+    const s=$('expR'); s.min=r.min; s.max=r.max; s.step=r.step||((r.max-r.min)/20);
+    let cur=0; try{ cur = track.getSettings().exposureCompensation ?? 0; }catch(e){}
+    s.value=cur; $('expV').textContent = (+cur).toFixed(1);
+    s.addEventListener('input', ()=>{
+      $('expV').textContent = (+s.value).toFixed(1);
+      track.applyConstraints({advanced:[{exposureCompensation:+s.value}]}).catch(()=>{});
+    });
+  } else { $('rowExp').querySelector('.val').textContent='n/a'; $('expR').disabled=true; }
+
+  const wbModes = caps.whiteBalanceMode || [];
+  const btn=$('wbBtn');
+  if(wbModes.includes('manual')){
+    btn.addEventListener('click', ()=>{
+      const manual = btn.textContent==='auto';
+      track.applyConstraints({advanced:[{whiteBalanceMode: manual?'manual':'continuous'}]})
+        .then(()=>{ btn.textContent = manual?'locked':'auto'; btn.classList.toggle('sel',manual); })
+        .catch(()=>{ btn.textContent='failed'; });
+    });
+  } else { btn.textContent='n/a'; btn.disabled=true; }
+}
+
+/* ---------- boundary calibration ---------- */
+function buildBounds(){
+  const host=$('bounds'); host.innerHTML='';
+  BOUNDS.forEach((v,i)=>{
+    const lo=NAMES[(i+8)%9], hi=NAMES[i];
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML = '<div class="lab">'+lo+' | '+hi+'</div>'
+      + '<button class="sbtn">−5</button><button class="sbtn">−1</button>'
+      + '<div class="val">'+v+'°</div>'
+      + '<button class="sbtn">+1</button><button class="sbtn">+5</button>';
+    const [m5,m1,,p1,p5] = row.querySelectorAll('button,.val');
+    const bump = d => () => {
+      BOUNDS[i] = norm(BOUNDS[i]+d); save('dalton.bounds', BOUNDS);
+      row.querySelector('.val').textContent = BOUNDS[i]+'°';
+    };
+    m5.onclick=bump(-5); m1.onclick=bump(-1); p1.onclick=bump(1); p5.onclick=bump(5);
+    host.appendChild(row);
+  });
+}
+$('resetB').addEventListener('click', ()=>{ BOUNDS=DEF_BOUNDS.slice(); save('dalton.bounds',BOUNDS); buildBounds(); });
+
+markSizes(); buildBounds();
+$('bSpeak').classList.toggle('off', !speakOn);
+if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+  $('err').textContent = 'This browser exposes no camera API. Open the page over http://localhost or https://.';
+</script>
+</body>
+</html>
