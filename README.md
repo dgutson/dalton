@@ -33,6 +33,33 @@ A second pass at S >= 0.05 runs only when the strict pass finds nothing. If it t
 a faint but consistent tint it reports the colour marked WASHED OUT; if the tint is
 below 5% saturation it is a genuine white LED.
 
+## Simplified mode
+
+The `FULL` / `SIMPLE` pill in the top corner switches the answer set. Simplified mode
+answers only RED, YELLOW, GREEN or OTHER — the vocabulary of equipment status LEDs.
+AMBER becomes YELLOW; blue, cyan, violet, magenta and white all become OTHER. The mode
+is remembered between launches.
+
+Fine-grained names like AMBER and LIME are worse than useless to a user who has no
+referent for them. Precision in the output is not the goal; actionability is.
+
+With only four answers each boundary carries more weight, so two zones report both
+names instead of rounding off:
+
+    7 - 17 deg    RED OR YELLOW
+    63 - 93 deg   YELLOW OR GREEN
+
+The second is the whole LIME band plus its margins. Yellow-green is genuinely ambiguous
+on untested hardware — it could be a yellow LED reading green or a green LED reading
+yellow — so it is reported as unsure until calibration settles it. **To settle it:** when
+the app says YELLOW OR GREEN, note which LED you are pointing at and the hue in the
+stats line, then move the YELLOW|LIME or LIME|GREEN boundary so that band collapses
+onto the correct side.
+
+Hedging stops at the edges of OTHER deliberately. Red LEDs read close to the magenta
+cut at 345 deg, so hedging there would fire constantly, and "red or other" is not a
+distinction worth acting on.
+
 ## Reading the display
 
 Nothing you need is encoded in colour alone. The name is text, and the bar is
@@ -60,6 +87,7 @@ matter, so it gets its own name instead of being swallowed by GREEN.
 ## Controls
 
     tap image      freeze / unfreeze, and speak the reading
+    FULL / SIMPLE  switch between nine colour names and red/yellow/green/other
     speaker icon   speech on / off (spoken only when the name changes)
     gear icon      sample size, exposure, white-balance lock, boundary calibration
 

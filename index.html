@@ -36,6 +36,9 @@
   #name{font-size:42px;line-height:1;font-weight:800;letter-spacing:.02em;flex:1;min-width:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #name.small{font-size:27px}
+  #name.xsmall{font-size:20px;letter-spacing:0;white-space:normal;line-height:1.1}
+  .tbtn.mode{width:auto;min-width:74px;padding:0 12px;font-size:13px;font-weight:800;letter-spacing:.07em}
+  .tbtn.mode.on{background:#2d6cdf;border-color:#2d6cdf;color:#fff}
   #note{font-size:14px;line-height:1.3;color:var(--warn);min-height:18px;font-weight:600}
   #note.ok{color:var(--ok)} #note.bad{color:var(--bad)} #note.dim{color:var(--dim);font-weight:500}
   #bar{width:100%;height:42px;display:block;border-radius:8px;border:1px solid var(--line)}
@@ -72,6 +75,7 @@
     <div id="reticle"></div>
     <div id="frozen">FROZEN</div>
     <div id="toolbar">
+      <button class="tbtn mode" id="bMode" title="simplified mode">FULL</button>
       <button class="tbtn" id="bSpeak" title="speech">&#128266;</button>
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
@@ -131,7 +135,14 @@
 const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
 const ABBR   = ['R','A','Y','L','G','C','B','V','M'];
 const SWATCH = ['#ff2b1f','#ff8c00','#ffe000','#b4ff00','#00e05a','#00e5e5','#2b6bff','#9b4dff','#ff3fa4'];
-const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];   // band i spans bounds[i] -> bounds[i+1]
+const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];
+// Simplified mode: one bucket per band. null = the yellow-green zone, which is
+// genuinely ambiguous on this hardware and is reported as unsure rather than guessed.
+//              RED     AMBER     YELLOW   LIME   GREEN    CYAN     BLUE     VIOLET   MAGENTA
+const SIMPLE = ['RED', 'YELLOW', 'YELLOW', null, 'GREEN', 'OTHER', 'OTHER', 'OTHER', 'OTHER'];
+const SIMPLE_CSS = {RED:'#ff2b1f', YELLOW:'#ffe000', GREEN:'#00e05a', OTHER:'#9aa6b2'};
+const UNSURE_CSS = '#b4ff00';
+const S_ORDER = {RED:0, YELLOW:1, GREEN:2, OTHER:3};   // canonical order for "X OR Y"   // band i spans bounds[i] -> bounds[i+1]
 let BOUNDS = load('dalton.bounds', DEF_BOUNDS).slice();
 
 function load(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
@@ -202,6 +213,7 @@ const sc = document.createElement('canvas');
 const sctx = sc.getContext('2d', {willReadFrequently:true});
 
 let stream=null, track=null, caps={}, frozen=false, speakOn=load('dalton.speak',true);
+let simple = load('dalton.simple', false);
 let sampleFactor = load('dalton.size', 0.10);
 let ema=null, stableName='', stableCount=0, spokenName='', wakeLock=null;
 
@@ -270,12 +282,17 @@ function render(a, b){
     else { ema.x = ema.x*0.5 + src.vx*0.5; ema.y = ema.y*0.5 + src.vy*0.5; }
     hue  = norm(Math.atan2(ema.y, ema.x)*180/Math.PI);
     band = bandOf(hue);
-    label  = NAMES[band];
-    swatch = SWATCH[band];
+    const sm = simple ? simpleOf(hue, band) : null;
+    label  = sm ? sm.label : NAMES[band];
+    swatch = sm ? sm.css   : SWATCH[band];
 
     const nb = nearestBoundary(hue);
     if(washed){ note = 'WASHED OUT — only a faint tint survives, lower exposure to confirm'; cls=''; }
     else if(src.conc < 0.80){ note = 'UNCERTAIN — hue is scattered, steady the camera'; cls=''; }
+    else if(sm){
+      if(sm.unsure){ note = 'UNSURE — hue ' + hue.toFixed(0) + '° ' + sm.why; cls=''; }
+      else { note = 'confident'; cls='ok'; }
+    }
     else if(nb.dist < 6){
       note = 'BORDERLINE — ' + nb.dist.toFixed(0) + '° from the '
            + NAMES[nb.lo] + '/' + NAMES[nb.hi] + ' edge'; cls='';
@@ -285,13 +302,15 @@ function render(a, b){
     ema = null;
     const f = b || a;
     if(f.nUse >= f.minUse && f.sat < 0.09 && a.nClip/a.n > 0.20){
-      label='WHITE'; note='Bright with no hue — a white LED'; cls=''; swatch='#f2f2f2';
+      label = simple ? 'OTHER' : 'WHITE';
+      note='Bright with no hue — a white LED'; cls=''; swatch = simple ? SIMPLE_CSS.OTHER : '#f2f2f2';
     } else if(a.nClip/a.n > 0.25){
       label='TOO BRIGHT'; note='Move back, or lower exposure in settings'; cls='bad';
     } else if(a.nDark/a.n > 0.80){
       label='OFF / DARK'; note='Nothing emitting inside the circle'; cls='bad';
     } else if(a.valAll > 90){
-      label='WHITE'; note='Bright but no hue — white, or washed out'; cls=''; swatch='#f2f2f2';
+      label = simple ? 'OTHER' : 'WHITE';
+      note='Bright but no hue — white, or washed out'; cls=''; swatch = simple ? SIMPLE_CSS.OTHER : '#f2f2f2';
     } else {
       label='NO CLEAR COLOUR'; note='Fill more of the circle with the LED'; cls='bad';
     }
@@ -299,7 +318,8 @@ function render(a, b){
 
   const st = src || a;
   elName.textContent = label;
-  elName.classList.toggle('small', label.length > 9);
+  elName.classList.toggle('small',  label.length > 9 && label.length <= 13);
+  elName.classList.toggle('xsmall', label.length > 13);
   elNote.textContent = note;
   elNote.className = cls;
   elSwatch.style.background = swatch;
@@ -308,10 +328,31 @@ function render(a, b){
     (hue===null ? 'hue    —   ' : 'hue ' + hue.toFixed(0).padStart(3) + '°  ')
     + 'sat ' + (st.sat*100).toFixed(0).padStart(3) + '%  val ' + st.val.toFixed(0).padStart(3)
     + '  agree ' + (st.conc*100).toFixed(0).padStart(3) + '%\n'
-    + 'px  use ' + st.nUse + '  clipped ' + a.nClip + '  gray ' + a.nGray + '  dark ' + a.nDark;
+    + 'band ' + (band>=0 ? NAMES[band] : '—').padEnd(8)
+    + ' px use ' + st.nUse + '  clipped ' + a.nClip + '  dark ' + a.nDark;
 
   drawBar(hue, band);
   maybeSpeak(label, cls);
+}
+
+// Collapse to RED / YELLOW / GREEN / OTHER. With only four answers each cut carries
+// more weight, so a hue sitting on one is reported as both rather than rounded off.
+function simpleOf(hue, band){
+  const bk = SIMPLE[band];
+  const nb = nearestBoundary(hue);
+  const nbr = (nb.dist < 6) ? (SIMPLE[nb.lo] === bk ? SIMPLE[nb.hi] : SIMPLE[nb.lo]) : bk;
+  if(bk === null || nbr === null)
+    return { label:'YELLOW OR GREEN', unsure:true, css:UNSURE_CSS,
+             why:'sits between yellow and green — note which LED this is' };
+  // Hedge only between the three colours that carry meaning. A hue near the edge of
+  // OTHER is not worth hedging — OTHER is not a state you act on, and red LEDs sit
+  // close enough to the magenta cut that it would fire constantly.
+  if(nbr !== bk && bk !== 'OTHER' && nbr !== 'OTHER'){
+    const pair = [bk, nbr].sort((x,y)=>S_ORDER[x]-S_ORDER[y]);
+    return { label: pair[0] + ' OR ' + pair[1], unsure:true, css:UNSURE_CSS,
+             why:'right on the ' + pair[0].toLowerCase() + '/' + pair[1].toLowerCase() + ' cut' };
+  }
+  return { label: bk, unsure:false, css: SIMPLE_CSS[bk] };
 }
 
 function nearestBoundary(h){
@@ -323,18 +364,37 @@ function nearestBoundary(h){
 /* ---------- hue bar: position-encoded, readable without colour vision ---------- */
 function drawBar(hue, band){
   const W=bar.width, H=bar.height, O=BOUNDS[0];      // bar starts at the red boundary
+  const segs=[];
+  if(simple){
+    for(let i=0;i<9;){
+      let j=i;
+      while(j+1<9 && SIMPLE[j+1]===SIMPLE[i]) j++;   // null===null merges too
+      const bk=SIMPLE[i];
+      segs.push({ from:BOUNDS[i], to:BOUNDS[(j+1)%9],
+                  text: bk===null ? '?' : bk,
+                  css:  bk===null ? UNSURE_CSS : SIMPLE_CSS[bk],
+                  on:   band>=i && band<=j });
+      i=j+1;
+    }
+  } else {
+    for(let i=0;i<9;i++)
+      segs.push({ from:BOUNDS[i], to:BOUNDS[(i+1)%9], text:ABBR[i], css:SWATCH[i], on:i===band });
+  }
+
   bctx.clearRect(0,0,W,H);
   const xOf = h => cycFwd(O, h)/360*W;
-  for(let i=0;i<9;i++){
-    const x0=xOf(BOUNDS[i]), span=cycFwd(BOUNDS[i],BOUNDS[(i+1)%9])/360*W;
-    bctx.fillStyle = SWATCH[i];
-    bctx.globalAlpha = (i===band) ? 1 : 0.34;
+  for(const sg of segs){
+    const x0=xOf(sg.from), span=cycFwd(sg.from, sg.to)/360*W;
+    bctx.fillStyle = sg.css;
+    bctx.globalAlpha = sg.on ? 1 : 0.34;
     bctx.fillRect(x0, 0, span, H*0.62);
     bctx.globalAlpha = 1;
-    bctx.fillStyle = (i===band) ? '#fff' : '#7d8894';
-    bctx.font = (i===band ? 'bold ' : '') + '22px system-ui,sans-serif';
+    bctx.fillStyle = sg.on ? '#fff' : '#7d8894';
+    bctx.font = (sg.on ? 'bold ' : '') + '22px system-ui,sans-serif';
     bctx.textAlign='center'; bctx.textBaseline='bottom';
-    if(span > 22) bctx.fillText(ABBR[i], x0+span/2, H);
+    let t = sg.text;
+    if(bctx.measureText(t).width > span - 6) t = t[0];   // fall back to the initial
+    if(bctx.measureText(t).width <= span - 2) bctx.fillText(t, x0+span/2, H);
   }
   if(hue!==null){
     const x = xOf(hue);
@@ -351,7 +411,7 @@ function maybeSpeak(label, cls){
   if(stableCount !== 3) return;                      // fire once, after 3 agreeing frames
   if(label === spokenName) return;
   spokenName = label;
-  say(cls === 'ok' ? label : label + ', uncertain');
+  say((cls === 'ok' || label.includes(' OR ')) ? label : label + ', uncertain');
 }
 function say(text){
   if(!speakOn || !window.speechSynthesis) return;
@@ -370,6 +430,18 @@ $('bSpeak').addEventListener('click', e=>{
   e.stopPropagation(); speakOn=!speakOn; save('dalton.speak',speakOn);
   $('bSpeak').classList.toggle('off', !speakOn);
 });
+$('bMode').addEventListener('click', e=>{
+  e.stopPropagation();
+  simple = !simple; save('dalton.simple', simple);
+  paintMode();
+  spokenName=''; stableCount=0;            // re-announce in the new vocabulary
+});
+function paintMode(){
+  const b=$('bMode');
+  b.textContent = simple ? 'SIMPLE' : 'FULL';
+  b.classList.toggle('on', simple);
+}
+
 $('bSet').addEventListener('click', e=>{ e.stopPropagation(); $('sheet').classList.add('on'); });
 $('closeS').addEventListener('click', ()=> $('sheet').classList.remove('on'));
 $('go').addEventListener('click', ()=>{ say('ready'); start(); });
@@ -431,7 +503,7 @@ function buildBounds(){
 }
 $('resetB').addEventListener('click', ()=>{ BOUNDS=DEF_BOUNDS.slice(); save('dalton.bounds',BOUNDS); buildBounds(); });
 
-markSizes(); buildBounds();
+markSizes(); buildBounds(); paintMode();
 $('bSpeak').classList.toggle('off', !speakOn);
 if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
   $('err').textContent = 'This browser exposes no camera API. Open the page over http://localhost or https://.';
