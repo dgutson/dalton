@@ -88,6 +88,7 @@
     <div id="frozen">FROZEN</div>
     <div id="toolbar">
       <button class="tbtn mode" id="bMode" title="simplified mode">FULL</button>
+      <button class="tbtn" id="bSpeak" title="speak the name (live mode)">&#128266;</button>
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
     <button id="shutter">SCAN</button>
@@ -122,21 +123,22 @@
     <button class="sbtn" data-sens="med">normal</button>
     <button class="sbtn" data-sens="high">loose</button>
   </div>
-  <p class="hint">How much brighter than the brightest point a thing must be to count as a light.
-     Strict finds only the obvious ones; loose also picks up dim or distant ones — and more false alarms,
-     which is the safer way round. Raised automatically if a bright background would otherwise swallow
-     everything.</p>
+  <p class="hint">How far above its own surroundings a thing must be to count as a light.
+     Strict finds only the obvious ones; loose also picks up dim or distant ones — and more
+     false alarms, which is the safer way round. A dim LED next to a blazing one is found
+     either way: brightness is judged locally, not against the brightest point in the shot.</p>
   <div class="row">
     <div class="lab">Bracket exposure</div>
     <button class="sbtn" id="brBtn">on</button>
   </div>
   <div class="row">
-    <div class="lab">Save last scan for debugging</div>
+    <div class="lab">Re-send last scan</div>
     <button class="sbtn" id="save">SAVE</button>
   </div>
-  <p class="hint">Writes the captured frame and every number behind each label into
-     <code>frames/</code> on this phone, where it can be read back and analysed. Only
-     useful while the colours are still being calibrated.</p>
+  <p class="hint">Every scan is written automatically to <code>frames/</code> on this phone \u2014
+     the captured image plus every number behind every label \u2014 so the detector can be
+     tested against real LEDs instead of guesses. Stays on the phone. Use this button only
+     if a scan said <em>not saved</em> because <code>serve.sh</code> was not running.</p>
   <p class="hint">Takes two extra darker shots and reads each light from whichever one blew out least.
      Slower (about a second) but it is the main defence against a clipped core. Needs camera exposure control.</p>
 
@@ -176,11 +178,18 @@ function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} 
 const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
 const ABBR   = ['R','A','Y','L','G','C','B','V','M'];
 const SWATCH = ['#ff2b1f','#ff8c00','#ffe000','#b4ff00','#00e05a','#00e5e5','#2b6bff','#9b4dff','#ff3fa4'];
-const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];     // band i spans bounds[i] -> bounds[i+1]
+// Band edges in degrees. The red/amber cut sits at 18 rather than 12 for the same
+// asymmetry: a red fault light photographs anywhere up to about 15 degrees, and
+// calling a fault a warning is the expensive direction.
+const DEF_BOUNDS = [345,18,40,68,88,160,200,250,288];     // band i spans bounds[i] -> bounds[i+1]
 // Simplified mode: one bucket per band. null = the yellow-green zone, which is
 // genuinely ambiguous on this hardware and is reported as unsure rather than guessed.
 //              RED     AMBER     YELLOW   LIME   GREEN    CYAN     BLUE     VIOLET   MAGENTA
-const SIMPLE = ['RED', 'YELLOW', 'YELLOW', null, 'GREEN', 'OTHER', 'OTHER', 'OTHER', 'OTHER'];
+// Simplified names, one per band. Lime (68-88 deg) is deliberately YELLOW, not GREEN:
+// it is where the old yellow-green indicators land, and the two mistakes are not
+// equally bad. A yellow LED called GREEN is a warning that never gets looked at. A
+// green LED called YELLOW costs a second glance. Err towards the second one.
+const SIMPLE = ['RED', 'YELLOW', 'YELLOW', 'YELLOW', 'GREEN', 'OTHER', 'OTHER', 'OTHER', 'OTHER'];
 const SIMPLE_CSS = {RED:'#ff2b1f', YELLOW:'#ffe000', GREEN:'#00e05a', OTHER:'#9aa6b2'};
 const UNSURE_CSS = '#b4ff00';
 const S_ORDER = {RED:0, YELLOW:1, GREEN:2, OTHER:3};      // canonical order for "X OR Y"
@@ -259,8 +268,16 @@ function twoPass(data, stride, x0, y0, w, h, circle, labels, self){
 }
 
 /* ---------- naming ---------- */
+// A mean hue vector shorter than this is not a colour. It is a grey fringe whose
+// pixels point every direction at once and cancel — which is exactly what the edge
+// of a white LED looks like. Accepting it on pixel count alone produced confident
+// nonsense: a white power LED named VIOLET at 259 degrees, agreement 0.10, while
+// every genuine colour in the same frame agreed at 0.97. Hand it to the fallbacks,
+// which know how to recognise white.
+const MINCONC = 0.50;
+
 function pickSource(a, b){
-  if(a.nUse >= a.minUse) return {src:a, washed:false};
+  if(a.nUse >= a.minUse && a.conc >= MINCONC) return {src:a, washed:false};
   if(b && b.nUse >= b.minUse && b.conc >= 0.90 && b.sat >= 0.09) return {src:b, washed:true};
   return {src:null, washed:false};
 }
@@ -326,9 +343,6 @@ function simpleOf(hue, band){
   const bk = SIMPLE[band];
   const nb = nearestBoundary(hue);
   const nbr = (nb.dist < 6) ? (SIMPLE[nb.lo] === bk ? SIMPLE[nb.hi] : SIMPLE[nb.lo]) : bk;
-  if(bk === null || nbr === null)
-    return { label:'YELLOW OR GREEN', unsure:true, css:UNSURE_CSS,
-             why:'sits between yellow and green — note which LED this is' };
   // Hedge only between the three colours that carry meaning. A hue near the edge of
   // OTHER is not worth hedging — OTHER is not a state you act on, and red LEDs sit
   // close enough to the magenta cut that it would fire constantly.
@@ -351,44 +365,133 @@ function nearestBoundary(h){
    threshold on value plus connected components finds them. The colour is deliberately
    NOT read from the core — that is the clipped part and carries no hue — but from a
    padded box around each blob, where the unclipped fringe lives. */
-const SENS = {low:0.90, med:0.82, high:0.68};   // fraction of the frame's peak value
-// Isolation cutoff. A blob over it is *flagged*, never dropped: a spare false positive
-// is cheap to ignore on screen, a missing LED is not.
+// Two thresholds, OR-ed together, because each one is blind to what the other sees.
+//
+//   local  — how far a pixel rises above its OWN surroundings. Scale-free, so a dim
+//            activity LED on a dark bezel passes as easily as a blazing power LED.
+//            Blind to a light so large it becomes its own background.
+//   global — a fraction of the brightest pixel in the frame. Catches that large light,
+//            and nothing dimmer than the fraction. One bright LED, or a lamp anywhere
+//            in shot, sets a bar every other LED then fails to clear.
+//
+// Global alone is what shipped, and on a router panel it found the top LED and lost the
+// six below it. A spare false light is cheap to ignore on screen; a missing one is not.
+const TIER  = {low:[55,0.90], med:[35,0.82], high:[25,0.68]};   // [local rise, global fraction]
+const FLOOR = 35;        // absolute: below this nothing counts as lit, however local
+const BGDIV = 30;        // background grid block = min(W,H)/BGDIV
+// Isolation cutoff. A blob over it is *flagged*, never dropped.
 const ISO = 0.75;
 
-// One oversized blob means the threshold was too low and a bright background merged
-// into a single region — which swallows any LED sitting on it. Step the threshold up
-// until nothing is oversized, rather than silently dropping the lot.
-function detectAdaptive(data, W, H, frac){
-  const maxArea = Math.round(W*H*0.10);
-  const ladder = [frac];
-  for(const f of [0.82, 0.90, 0.95]) if(f > frac + 1e-6) ladder.push(f);
-  let det = null;
-  for(const f of ladder){
-    det = detectBlobs(data, W, H, f);
-    det.frac = f;
-    if(!det.blobs.some(b => b.area > maxArea)) break;
+// 3x3 box, separable. Costs two passes and drops the sensor noise floor about threefold,
+// which is the only thing the loose threshold was otherwise finding in a dim room.
+function blur3(src, W, H){
+  const tmp = new Float32Array(W*H), out = new Float32Array(W*H);
+  for(let y=0;y<H;y++){
+    const r=y*W;
+    for(let x=0;x<W;x++)
+      tmp[r+x] = (src[r+(x>0?x-1:0)] + src[r+x] + src[r+(x<W-1?x+1:W-1)])/3;
   }
-  return det;
+  for(let y=0;y<H;y++){
+    const r=y*W, ru=(y>0?y-1:0)*W, rd=(y<H-1?y+1:H-1)*W;
+    for(let x=0;x<W;x++) out[r+x] = (tmp[ru+x] + tmp[r+x] + tmp[rd+x])/3;
+  }
+  return out;
 }
 
-function detectBlobs(data, W, H, frac){
-  const N = W*H;
+// Min or max over a (2r+1) square of grid cells, clamped at the edges.
+function winOp(a, bw, bh, r, isMin){
+  const out = new Float32Array(bw*bh);
+  for(let y=0;y<bh;y++){
+    const y0=Math.max(0,y-r), y1=Math.min(bh-1,y+r);
+    for(let x=0;x<bw;x++){
+      const x0=Math.max(0,x-r), x1=Math.min(bw-1,x+r);
+      let v = a[y*bw+x];
+      for(let ny=y0;ny<=y1;ny++) for(let nx=x0;nx<=x1;nx++){
+        const u = a[ny*bw+nx];
+        if(isMin ? u<v : u>v) v=u;
+      }
+      out[y*bw+x]=v;
+    }
+  }
+  return out;
+}
+
+// Local background: a grey opening on a coarse grid. Eroding deletes anything smaller
+// than the window — every LED — and dilating puts the level back. The dilation is
+// deliberately the wider of the two: a symmetric opening leaves a false ridge along any
+// hard bright edge (a window frame, a monitor bezel), and a ridge reads as a row of
+// lights. Wider dilation pushes the estimate up to the bright side's own level instead.
+function bgGrid(sm, W, H, B){
+  const bw = Math.ceil(W/B), bh = Math.ceil(H/B);
+  const g = new Float32Array(bw*bh).fill(1e9);
+  for(let y=0;y<H;y++){
+    const row=(y/B|0)*bw, r=y*W;
+    for(let x=0;x<W;x++){
+      const i = row + (x/B|0), v = sm[r+x];
+      if(v < g[i]) g[i] = v;
+    }
+  }
+  return {grid: winOp(winOp(g,bw,bh,1,true), bw,bh,2,false), bw, bh};
+}
+
+function detectBlobs(data, W, H, tier){
+  const N=W*H, t = TIER[tier] || TIER.med, Tloc = t[0], frac = t[1];
+  const B = Math.max(8, Math.round(Math.min(W,H)/BGDIV));
+
   const val = new Uint8Array(N);
   let peak = 0;
   for(let p=0;p<N;p++){
-    const i=p<<2; const R=data[i], G=data[i+1], B=data[i+2];
-    const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+    const i=p<<2; const R=data[i], G=data[i+1], Bc=data[i+2];
+    const mx = R>G ? (R>Bc?R:Bc) : (G>Bc?G:Bc);
     val[p]=mx; if(mx>peak) peak=mx;
   }
-  const T = Math.max(100, Math.round(peak*frac));
+
+  const sm = blur3(val, W, H);
+  const bg = bgGrid(sm, W, H, B);
+
+  // Global half keeps the escalation ladder. On a bright background a low global
+  // threshold merges the whole wall into one region, and that region swallows the
+  // LEDs sitting on it. Escalate on a pixel count rather than a connected area —
+  // same protection, without a second flood fill per rung.
+  const maxArea = Math.round(N*0.10);
+  const ladder = [frac];
+  for(const f of [0.82, 0.90, 0.95]) if(f > frac + 1e-6) ladder.push(f);
+  let T = 0, used = frac;
+  for(const f of ladder){
+    T = Math.max(100, Math.round(peak*f)); used = f;
+    let c=0; for(let p=0;p<N;p++) if(val[p] >= T) c++;
+    if(c <= maxArea) break;
+  }
+
+  // mask = local rise OR global brightness, in one bilinear pass over the background
+  const mask = new Uint8Array(N);
+  for(let y=0;y<H;y++){
+    const fy = (y+0.5)/B - 0.5;
+    let gy0 = Math.floor(fy); let ty = fy - gy0;
+    if(gy0 < 0){ gy0=0; ty=0; } else if(gy0 > bg.bh-1){ gy0=bg.bh-1; ty=0; }
+    const gy1 = Math.min(gy0+1, bg.bh-1);
+    const rowA = gy0*bg.bw, rowB = gy1*bg.bw, r = y*W;
+    for(let x=0;x<W;x++){
+      const p = r+x;
+      if(val[p] >= T){ mask[p]=1; continue; }
+      const sv = sm[p];
+      if(sv < FLOOR) continue;
+      const fx = (x+0.5)/B - 0.5;
+      let gx0 = Math.floor(fx); let tx = fx - gx0;
+      if(gx0 < 0){ gx0=0; tx=0; } else if(gx0 > bg.bw-1){ gx0=bg.bw-1; tx=0; }
+      const gx1 = Math.min(gx0+1, bg.bw-1);
+      const bgv = (bg.grid[rowA+gx0]*(1-tx) + bg.grid[rowA+gx1]*tx)*(1-ty)
+                + (bg.grid[rowB+gx0]*(1-tx) + bg.grid[rowB+gx1]*tx)*ty;
+      if(sv - bgv >= Tloc) mask[p]=1;
+    }
+  }
 
   const labels = new Int32Array(N);               // 0 = background
   const stack  = new Int32Array(N);               // every pixel is pushed at most once
   const blobs = [];
   let next = 1;
   for(let p0=0;p0<N;p0++){
-    if(val[p0] < T || labels[p0]) continue;
+    if(!mask[p0] || labels[p0]) continue;
     const id = next++;
     let sp=0; stack[sp++]=p0; labels[p0]=id;
     let area=0, sumx=0, sumy=0, bx0=W, by0=H, bx1=0, by1=0, bpeak=0;
@@ -403,15 +506,15 @@ function detectBlobs(data, W, H, frac){
         const ny=qy+dy; if(ny<0||ny>=H) continue;
         for(let dx=-1;dx<=1;dx++){
           const nx=qx+dx; if(nx<0||nx>=W) continue;
-          const r = ny*W+nx;
-          if(labels[r] || val[r] < T) continue;
-          labels[r]=id; stack[sp++]=r;
+          const rr = ny*W+nx;
+          if(labels[rr] || !mask[rr]) continue;
+          labels[rr]=id; stack[sp++]=rr;
         }
       }
     }
     blobs.push({id, area, cx:sumx/area, cy:sumy/area, x0:bx0, y0:by0, x1:bx1, y1:by1, peak:bpeak});
   }
-  return {labels, val, blobs, T, peak};
+  return {labels, val, blobs, T, Tloc, peak, frac:used};
 }
 
 const MAX_LEDS = 24;
@@ -516,6 +619,8 @@ let sens = load('dalton.sens','high');
 let bracketOn = load('dalton.bracket', true);
 let ema=null, wakeLock=null;
 let mode='live', shot=null, busy=false;
+let speakOn = load('dalton.speak', true);
+let stableName='', stableCount=0, spokenName='';
 
 /* ---------- camera ---------- */
 async function start(){
@@ -549,6 +654,27 @@ function sizeReticle(){
   ret.style.width = px+'px'; ret.style.height = px+'px';
 }
 addEventListener('resize', ()=>{ sizeReticle(); if(mode==='scan') drawOverlay(); });
+
+/* ---------- speech ----------
+   Live mode only. In scan mode the picture already carries every name, so reading
+   them aloud would be noise. */
+function maybeSpeak(label, cls){
+  if(label === stableName) stableCount++; else { stableName = label; stableCount = 1; }
+  if(stableCount !== 3) return;                      // fire once, after 3 agreeing frames
+  if(label === spokenName) return;
+  spokenName = label;
+  say((cls === 'ok' || label.indexOf(' OR ') > 0) ? label : label + ', uncertain');
+}
+function say(text){
+  if(!speakOn || !window.speechSynthesis) return;
+  try{ speechSynthesis.cancel();
+       const u = new SpeechSynthesisUtterance(String(text).toLowerCase());
+       u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
+}
+function hush(){
+  stableName=''; stableCount=0; spokenName='';
+  try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+}
 
 /* ---------- live loop ---------- */
 let last=0;
@@ -584,6 +710,7 @@ function render(a, b){
   paintName(r.label, r.note, r.cls, r.swatch);
   elStats.textContent = statLine(hue, r.band, st, a);
   drawBar(hue, r.band);
+  maybeSpeak(r.label, r.cls);
 }
 
 function paintName(label, note, cls, swatch){
@@ -681,6 +808,7 @@ async function bracket(){
 async function scan(){
   if(busy || !video.videoWidth) return;
   busy = true; $('shutter').disabled = true;
+  hush();
   $('frozen').textContent='SCANNING…'; $('frozen').classList.add('on');
   await new Promise(r=>requestAnimationFrame(()=>r()));
 
@@ -691,7 +819,7 @@ async function scan(){
   let frames, det, out;
   try{
     frames = await bracket();
-    det = detectAdaptive(frames[0].data, vw, vh, SENS[sens] || SENS.med);
+    det = detectBlobs(frames[0].data, vw, vh, sens);
     out = measureBlobs(frames, det, vw, vh);
   }catch(e){
     $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
@@ -700,7 +828,8 @@ async function scan(){
     return;
   }
 
-  shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, peak:det.peak, frac:det.frac,
+  shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, Tloc:det.Tloc,
+           peak:det.peak, frac:det.frac,
            nRaw:det.blobs.length, evs:frames.map(f=>f.ev) };
   mode='scan';
   paintShutter();
@@ -710,10 +839,12 @@ async function scan(){
   const sv=$('save'); sv.classList.remove('done','fail'); sv.textContent='SAVE';
   drawOverlay();
   busy=false; $('shutter').disabled=false;
+  autoSave();                                   // not awaited: the picture is already up
 }
 
 function toLive(){
   mode='live'; shot=null; ema=null;
+  hush();
   ov.classList.remove('on'); ret.classList.remove('hide');
   panel.style.display = '';
   $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
@@ -721,10 +852,16 @@ function toLive(){
   paintShutter();
 }
 
-// Map full-resolution frame coordinates onto the displayed area (object-fit: cover).
-function coverMap(){
+// Map full-resolution frame coordinates onto the displayed area.
+//
+// The live video is object-fit: cover, which on a portrait phone showing a landscape
+// sensor crops away about two thirds of the width. That is right for aiming — the
+// reticle is dead centre — and wrong for a still: LEDs found in the cropped-off part
+// still get a ring and a label, clamped to the screen edge, pointing at nothing
+// visible. So the captured frame is fitted whole instead, letterboxed.
+function fitMap(){
   const cw=cam.clientWidth, ch=cam.clientHeight;
-  const s = Math.max(cw/shot.W, ch/shot.H);
+  const s = Math.min(cw/shot.W, ch/shot.H);
   return {s, dx:(cw - shot.W*s)/2, dy:(ch - shot.H*s)/2, cw, ch};
 }
 
@@ -737,12 +874,12 @@ const hits = (p,q) => !(p.x+p.w < q.x || q.x+q.w < p.x || p.y+p.h < q.y || q.y+q
 
 function drawOverlay(){
   if(!shot) return;
-  const m = coverMap(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const m = fitMap(), dpr = Math.min(2, window.devicePixelRatio || 1);
   ov.width = Math.round(m.cw*dpr); ov.height = Math.round(m.ch*dpr);
   ov.style.width = m.cw+'px';      ov.style.height = m.ch+'px';
   const g = octx;
   g.setTransform(dpr,0,0,dpr,0,0);
-  g.clearRect(0,0,m.cw,m.ch);
+  g.fillStyle='#000'; g.fillRect(0,0,m.cw,m.ch);   // opaque: the live video is behind
   g.drawImage(shotc, m.dx, m.dy, shot.W*m.s, shot.H*m.s);
 
   const placed=[];
@@ -814,46 +951,69 @@ function footText(){
   if(d.small) p.push(d.small+' too small');
   if(d.big)   p.push(d.big+' too large');
   if(d.over)  p.push(d.over+' past the first '+MAX_LEDS);
-  if(shot.frac > (SENS[sens]||SENS.med) + 1e-6) p.push('threshold raised for a bright background');
+  if(shot.frac > (TIER[sens]||TIER.med)[1] + 1e-6) p.push('threshold raised for a bright background');
   return p.length ? 'ignored: ' + p.join(', ') : '';
 }
 
 // Hand the captured frame back to the machine. Everything here stays on the phone —
 // 127.0.0.1 is the Python process that served this page — but it is the only way the
 // algorithm can be tested against a real camera instead of synthetic images.
+function framePayload(){
+  const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
+  const meta = {
+    w:shot.W, h:shot.H, T:shot.T, Tloc:shot.Tloc, peak:shot.peak, frac:shot.frac, evs:shot.evs,
+    sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
+    caps:{ exposure: !!(caps && caps.exposureCompensation),
+           wb: !!(caps && caps.whiteBalanceMode) },
+    leds: shot.leds.map((b,i)=>{
+      const m=b.meas, src=m.pick.src;
+      return { n:i+1, cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area, pad:b.pad,
+               peak:b.peak, surround:Math.round(b.surround), lowIso:!!b.lowIso,
+               label:b.res.label, note:b.res.note, ev:m.ev,
+               hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
+               sat: src ? +(src.sat).toFixed(3) : null,
+               conc: src ? +(src.conc).toFixed(3) : null,
+               nUse:m.a.nUse, nClip:m.a.nClip, nGray:m.a.nGray, nDark:m.a.nDark, nPix:m.a.n };
+    })
+  };
+  const head = new TextEncoder().encode(JSON.stringify(meta) + '\n');
+  const body = new Uint8Array(head.length + img.data.length);
+  body.set(head, 0); body.set(img.data, head.length);
+  return body;
+}
+
+async function postFrame(){
+  if(!shot) throw new Error('no scan yet');
+  const r = await fetch('/frame', {method:'POST', body:framePayload()});
+  const j = await r.json();
+  if(!r.ok || !j.ok) throw new Error('server said no');
+  return j.saved;
+}
+
+// Every scan is handed back automatically. A debug channel behind a button is a debug
+// channel nobody presses, and without real frames the detector can only ever be tuned
+// against guesses about what a camera does.
+let flashGen = 0;
+function flash(text, ms){
+  const chip = $('frozen'), gen = ++flashGen;
+  chip.textContent = text; chip.classList.add('on');
+  setTimeout(()=>{
+    if(gen !== flashGen) return;
+    chip.classList.remove('on'); chip.textContent = 'FROZEN';
+  }, ms);
+}
+async function autoSave(){
+  try{ flash('saved ' + await postFrame(), 1400); }
+  catch(e){ flash('not saved', 2400); }
+}
+
+// Manual retry, for when the page was opened before the server was up.
 async function saveFrame(){
   const btn = $('save');
-  if(btn.classList.contains('done')) return;
-  if(!shot){ btn.textContent = 'NO SCAN YET'; return; }
+  btn.classList.remove('done','fail');
   btn.textContent = 'SAVING';
-  try{
-    const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
-    const meta = {
-      w:shot.W, h:shot.H, T:shot.T, peak:shot.peak, frac:shot.frac, evs:shot.evs,
-      sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop,
-      caps:{ exposure: !!(caps && caps.exposureCompensation),
-             wb: !!(caps && caps.whiteBalanceMode) },
-      leds: shot.leds.map((b,i)=>{
-        const m=b.meas, src=m.pick.src;
-        return { n:i+1, cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area, pad:b.pad,
-                 peak:b.peak, surround:Math.round(b.surround), lowIso:!!b.lowIso,
-                 label:b.res.label, note:b.res.note, ev:m.ev,
-                 hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
-                 sat: src ? +(src.sat).toFixed(3) : null,
-                 conc: src ? +(src.conc).toFixed(3) : null,
-                 nUse:m.a.nUse, nClip:m.a.nClip, nGray:m.a.nGray, nDark:m.a.nDark, nPix:m.a.n };
-      })
-    };
-    const head = new TextEncoder().encode(JSON.stringify(meta) + '\n');
-    const body = new Uint8Array(head.length + img.data.length);
-    body.set(head, 0); body.set(img.data, head.length);
-    const r = await fetch('/frame', {method:'POST', body});
-    const j = await r.json();
-    if(!r.ok || !j.ok) throw new Error('server said no');
-    btn.textContent = 'SAVED ' + j.saved; btn.classList.add('done');
-  }catch(e){
-    btn.textContent = 'FAILED — run serve.sh'; btn.classList.add('fail');
-  }
+  try{ btn.textContent = 'SAVED ' + await postFrame(); btn.classList.add('done'); }
+  catch(e){ btn.textContent = 'FAILED \u2014 run serve.sh'; btn.classList.add('fail'); }
 }
 
 function renameAll(){
@@ -867,6 +1027,7 @@ cam.addEventListener('click', ()=>{
   if(mode==='scan') return;                 // the picture is for reading, not poking
   frozen = !frozen;
   $('frozen').classList.toggle('on', frozen);
+  if(frozen){ spokenName=''; say(elName.textContent); } else hush();
 });
 
 $('shutter').addEventListener('click', e=>{
@@ -879,10 +1040,19 @@ function paintShutter(){
   b.classList.toggle('on', mode==='scan');
 }
 
+$('bSpeak').addEventListener('click', e=>{
+  e.stopPropagation();
+  speakOn = !speakOn; save('dalton.speak', speakOn);
+  $('bSpeak').classList.toggle('off', !speakOn);
+  hush();
+});
+$('bSpeak').classList.toggle('off', !speakOn);
+
 $('save').addEventListener('click', e=>{ e.stopPropagation(); saveFrame(); });
 $('bMode').addEventListener('click', e=>{
   e.stopPropagation();
   simple = !simple; save('dalton.simple', simple);
+  hush();
   paintMode();
   if(mode==='scan') renameAll();           // the stored readings are still good
 });
@@ -894,7 +1064,7 @@ function paintMode(){
 
 $('bSet').addEventListener('click', e=>{ e.stopPropagation(); $('sheet').classList.add('on'); });
 $('closeS').addEventListener('click', ()=> $('sheet').classList.remove('on'));
-$('go').addEventListener('click', start);
+$('go').addEventListener('click', ()=>{ start(); say('ready'); });
 
 document.querySelectorAll('[data-size]').forEach(b=>{
   b.addEventListener('click', ()=>{

@@ -43,18 +43,28 @@ is remembered between launches.
 Fine-grained names like AMBER and LIME are worse than useless to a user who has no
 referent for them. Precision in the output is not the goal; actionability is.
 
-With only four answers each boundary carries more weight, so two zones report both
-names instead of rounding off:
+With only four answers each boundary carries more weight, so two narrow zones report
+both names instead of rounding off. Measured by running the shipped code against a hue
+sweep (`tools/check.sh`):
 
-    7 - 17 deg    RED OR YELLOW
-    63 - 93 deg   YELLOW OR GREEN
+      0 - 10 deg    RED
+     15 - 20 deg    RED OR YELLOW
+     25 - 80 deg    YELLOW
+     85 - 90 deg    YELLOW OR GREEN
+     95 deg up      GREEN
 
-The second is the whole LIME band plus its margins. Yellow-green is genuinely ambiguous
-on untested hardware — it could be a yellow LED reading green or a green LED reading
-yellow — so it is reported as unsure until calibration settles it. **To settle it:** when
-the app says YELLOW OR GREEN, note which LED you are pointing at and the hue in the
-stats line, then move the YELLOW|LIME or LIME|GREEN boundary so that band collapses
-onto the correct side.
+Both hedges are ten degrees wide and both sit on a cut that is genuinely ambiguous to
+the eye as well as to the camera. An earlier version left a twenty-six degree hole
+answering YELLOW OR GREEN across the whole LIME band — a refusal to answer, in the
+middle of the range where an answer is most wanted.
+
+Two band edges are deliberately off-centre, both in the same direction:
+
+- **Lime (68-88 deg) is YELLOW, not GREEN.** It is where the older yellow-green
+  indicators land. A yellow LED called GREEN is a warning nobody looks at; a green LED
+  called YELLOW costs a second glance. The second mistake is the cheap one.
+- **The red/amber cut is at 18 deg, not 12.** A red fault light photographs anywhere up
+  to about 15 degrees, and calling a fault a warning is the expensive direction.
 
 Hedging stops at the edges of OTHER deliberately. Red LEDs read close to the magenta
 cut at 345 deg, so hedging there would fire constantly, and "red or other" is not a
@@ -89,11 +99,13 @@ matter, so it gets its own name instead of being swallowed by GREEN.
     SCAN / LIVE    capture and name every LED at once, or go back to the reticle
     tap image      freeze / unfreeze (live mode only)
     FULL / SIMPLE  switch between nine colour names and red/yellow/green/other
+    speaker icon   speak the name aloud (live mode only)
     gear icon      sample size, scan settings, exposure, white-balance lock,
-                   boundary calibration, save-for-debugging
+                   boundary calibration
 
-There is no speech. The answer is a word on the screen; reading it out adds nothing
-for someone who is colourblind rather than blind.
+The speaker icon speaks the name in **live mode only**, once it has held steady for
+three frames. Scan mode stays silent: the picture already carries every name, and
+reading seven of them aloud is noise.
 
 Exposure and white-balance lock are only offered if the camera reports them; many
 Android cameras expose exposure compensation but not manual white balance.
@@ -120,8 +132,18 @@ No OpenCV. It would be about 9 MB of WebAssembly, vendored locally because this 
 offline, to get a connected-components pass that is fifty lines of JavaScript — and it
 would not touch the part that is actually hard. Finding the LEDs is the easy half:
 
-1. **Threshold** on value at a fraction of the frame's brightest point. LEDs are the
-   brightest things in frame and their cores clip, so they stand out.
+1. **Threshold twice and OR the results**, because each test is blind to what the
+   other sees:
+   - *local* — how far a pixel rises above its own surroundings, measured against a
+     grey opening of the frame on a coarse grid. Scale-free, so a dim activity LED on
+     a dark bezel passes as easily as a blazing power LED. Blind to a light so large
+     it becomes its own background.
+   - *global* — a fraction of the brightest pixel in the frame. Catches that large
+     light, and nothing dimmer than the fraction.
+
+   Global alone is what shipped first, and on a seven-LED router panel it found the
+   top one and lost the six below it: the power LED set a bar the rest could not
+   clear. See *Why one threshold was not enough* below.
 2. **Connected components**, 8-connected, iterative — recursion would blow the stack on
    a blob of a few thousand pixels.
 3. **Pad outwards** from each blob and read the colour *there*. This is the whole point.
@@ -130,7 +152,45 @@ would not touch the part that is actually hard. Finding the LEDs is the easy hal
    blob are skipped, so two adjacent LEDs cannot bleed into each other.
 4. **Name it** with exactly the same code the live reticle uses — one implementation of
    the bands, the simplified buckets and the hedging, so the two modes can never
-   disagree.
+   disagree. A fringe whose hue vectors cancel out — agreement below 0.50 — is not
+   named at all: that is a grey fringe pointing every direction at once, and naming it
+   produced a white LED confidently called VIOLET.
+
+### Why one threshold was not enough
+
+A global threshold is `max(100, peak x fraction)`. Every number in it is set by the
+single brightest pixel anywhere in shot, so:
+
+- a router's power LED, or a lamp in the corner of the frame, raises the bar for every
+  other LED;
+- an indicator at value 120 is invisible at any sensitivity once something hits 255;
+- and the floor of 100 discards anything dimmer than that outright.
+
+Local contrast has none of those properties. The background estimate is a grey opening
+— erode, then dilate — on a grid of blocks about a thirtieth of the frame. Eroding
+deletes anything smaller than the window, which is every LED; dilating puts the level
+back, so the estimate is the scene without its lights. The dilation is deliberately the
+wider of the two, because a symmetric opening leaves a false ridge along any hard
+bright edge (a window frame, a monitor bezel) and a ridge reads as a row of lights.
+
+Measured on the synthetic scenes, old versus new, at loose sensitivity:
+
+                                     global only    both
+    router, 7 LEDs top to bottom        3 / 7       7 / 7
+    5 LEDs beside a blown-out window    1 / 5       5 / 5
+    close-up, 1 huge LED + 2 small      2 / 3       3 / 3
+    empty room (false alarms)             0           0
+
+The last row is why the value is blurred 3x3 first: without it, the loose threshold
+finds sensor grain.
+
+### Why the captured frame is shown whole
+
+The live preview is `object-fit: cover`, which on a portrait phone showing a landscape
+sensor crops away about two thirds of the width. That is right for aiming — the reticle
+is dead centre — and wrong for a still. LEDs found in the cropped-off part still got a
+ring and a label, clamped to the screen edge, pointing at nothing visible. The captured
+frame is letterboxed instead, so everything that was found can be seen.
 
 ### What it deliberately does not do
 
@@ -147,10 +207,10 @@ used, and how many exposures it took. A silent cap reads as "that is everything"
 A lit white wall behind the LEDs used to defeat it completely: at a low threshold the
 wall merges into one giant region that swallows the LEDs inside it, and at a high one
 the LEDs survived detection only to be thrown out as "not isolated". Both are fixed.
-If any region comes back larger than a tenth of the frame, the threshold steps up
-(0.82 → 0.90 → 0.95 of peak) until nothing is oversized; the footer says when it did.
-Verified against a synthetic wall at value 200 behind LEDs clipping at 255: two LEDs,
-correct hues, at every sensitivity setting.
+The global half still steps up (0.82 → 0.90 → 0.95 of peak) if more than a tenth of the
+frame clears it, and the footer says when it did; the local half is unaffected by a
+bright background by construction. Verified against a synthetic wall at value 200
+behind LEDs clipping at 255: two LEDs, correct hues, at every sensitivity.
 
 ### Exposure bracketing
 
@@ -165,7 +225,7 @@ or if the camera refuses, it falls back to the single frame.
 - Two LEDs closer than a few pixels merge into one blob and get one name.
 - A reflection of an LED on glossy plastic is, to the camera, an LED.
 - None of this has been tested against a real camera yet, only against synthetic scenes
-  with realistic clipping profiles.
+  with realistic clipping profiles. Every capture is saved (below) so that changes.
 
 ## Running it, and handing frames back
 
@@ -178,8 +238,11 @@ process that served the page — but without it the algorithm can only ever be t
 against synthetic images, which is how both of the last two bugs got shipped in the
 first place.
 
-In scan mode the **SAVE** button posts the frozen frame plus everything the app
-decided about it. The server writes two files per capture:
+**Every scan is saved automatically.** A debug channel behind a button is a debug
+channel nobody presses — the first real capture that was wanted never got taken, which
+is why this is no longer a button. The chip at the top of the picture says `saved 0003`
+or `not saved`; settings has a re-send for the second case. The server writes two files
+per capture:
 
     frames/0001.rgba    raw RGBA, width*height*4 bytes
     frames/0001.json    threshold, exposures, hue boundaries, and one record per
@@ -197,3 +260,22 @@ To look at one:
 
 Standard library only: no Pillow, no numpy. `--marks` rings what the app thought it
 found, so a miss or a false positive is visible at a glance.
+
+## Tests
+
+    pkg install quickjs-ng python-numpy
+    ./tools/check.sh
+
+`tools/scenes.py` plants synthetic LEDs — emissive, gaussian, clipping where they go
+over 255 — on routers, lit walls, window edges and an empty room, and records where
+each one is and what hue it was planted at. `tools/detect_test.js` then runs **the real
+detector and namer, sliced straight out of `index.html` by its own section markers**,
+under quickjs. `tools/label_test.js` does the same for label placement, checking that
+nothing lands off-screen or on top of something else.
+
+There is no second copy of the algorithm anywhere, so there is nothing that can drift.
+An earlier Python transliteration found real bugs but had to be re-synced by hand after
+every edit; running the shipped JavaScript removes that whole class of mistake.
+
+What it will not catch: whether a real camera behaves like the synthetic model. That is
+what the saved frames are for.
