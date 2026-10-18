@@ -36,18 +36,9 @@
     color:#fff;font-size:15px;font-weight:800;letter-spacing:.11em;backdrop-filter:blur(6px)}
   #shutter.on{background:var(--sel);border-color:#fff}
   #shutter[disabled]{opacity:.5}
-  #save{position:absolute;right:10px;bottom:12px;height:48px;padding:0 16px;border-radius:999px;
-    border:2px solid rgba(255,255,255,.55);background:rgba(10,12,15,.74);color:#fff;
-    font-size:13px;font-weight:800;letter-spacing:.09em;backdrop-filter:blur(6px);display:none}
-  #save.on{display:block}
-  #save.done{background:#15803d;border-color:#4ade80}
-  #save.fail{background:#7f1d1d;border-color:#f87171}
 
   #panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;gap:9px}
-  #panel.scan{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  #panel.scan #bar{display:none}
-  #panel:not(.scan) #list{display:none}
   #nameRow{display:flex;align-items:center;gap:12px}
   #swatch{width:54px;height:54px;border-radius:12px;border:2px solid var(--line);flex:none;background:#000}
   #name{font-size:42px;line-height:1;font-weight:800;letter-spacing:.02em;flex:1;min-width:0;
@@ -61,17 +52,6 @@
   #bar{width:100%;height:42px;display:block;border-radius:8px;border:1px solid var(--line)}
   #stats{font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);white-space:pre}
 
-  #list{flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  .li{display:flex;gap:10px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--line)}
-  .li:last-child{border-bottom:0}
-  .li.sel{background:#1b2740}
-  .li .num{width:27px;height:27px;flex:none;border-radius:7px;background:#0b0d10;border:1px solid var(--line);
-    display:grid;place-items:center;font:700 14px system-ui,sans-serif}
-  .li.sel .num{background:var(--sel);border-color:var(--sel)}
-  .li .lt{min-width:0;display:flex;flex-direction:column;line-height:1.3}
-  .li .lt b{font-size:15px;letter-spacing:.02em}
-  .li .lt span{font-size:12px;color:var(--dim)}
-  .li.foot{display:block;font:12px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);white-space:normal}
 
   #sheet{position:fixed;inset:0;background:rgba(5,7,9,.96);z-index:20;display:none;
     flex-direction:column;padding:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -84,6 +64,8 @@
   .sbtn{min-width:44px;height:40px;border-radius:10px;border:1px solid var(--line);background:#1b2128;color:var(--fg);
     font-size:16px;font-weight:700;padding:0 12px}
   .sbtn.sel{background:var(--sel);border-color:var(--sel)}
+  .sbtn.done{background:#15803d;border-color:#4ade80}
+  .sbtn.fail{background:#7f1d1d;border-color:#f87171}
   .wide{width:100%;height:48px;margin-top:14px;font-size:16px}
   input[type=range]{flex:1;accent-color:#2d6cdf}
   p.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:6px 0 0}
@@ -106,20 +88,17 @@
     <div id="frozen">FROZEN</div>
     <div id="toolbar">
       <button class="tbtn mode" id="bMode" title="simplified mode">FULL</button>
-      <button class="tbtn" id="bSpeak" title="speech">&#128266;</button>
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
     <button id="shutter">SCAN</button>
-    <button id="save" title="send this frame to the machine">SAVE</button>
   </div>
   <div id="panel">
     <div id="nameRow">
       <div id="swatch"></div>
       <div id="name">—</div>
     </div>
-    <div id="note" class="dim">Point the circle at one LED, or press SCAN to name every LED in the picture.</div>
+    <div id="note" class="dim">Point the circle at one LED, or press SCAN to name every LED at once.</div>
     <canvas id="bar" width="720" height="84"></canvas>
-    <div id="list"></div>
     <div id="stats"></div>
   </div>
 </div>
@@ -151,6 +130,13 @@
     <div class="lab">Bracket exposure</div>
     <button class="sbtn" id="brBtn">on</button>
   </div>
+  <div class="row">
+    <div class="lab">Save last scan for debugging</div>
+    <button class="sbtn" id="save">SAVE</button>
+  </div>
+  <p class="hint">Writes the captured frame and every number behind each label into
+     <code>frames/</code> on this phone, where it can be read back and analysed. Only
+     useful while the colours are still being calibrated.</p>
   <p class="hint">Takes two extra darker shots and reads each light from whichever one blew out least.
      Slower (about a second) but it is the main defence against a clipped core. Needs camera exposure control.</p>
 
@@ -185,7 +171,6 @@
 function $(id){ return document.getElementById(id); }
 function load(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
 function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 /* ---------- colour bands ---------- */
 const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
@@ -263,7 +248,6 @@ function analyseRect(data, stride, x0, y0, w, h, minsat, circle, labels, self){
            sat: nUse? satSum/nUse : 0, val: nUse? valSum/nUse : 0,
            valAll: n? valAll/n : 0 };
 }
-function analyse(data, S, minsat){ return analyseRect(data, S, 0, 0, S, S, minsat, true, null, 0); }
 
 // Strict pass first; the low-saturation pass costs a second sweep and is only worth
 // running when the strict one came back empty.
@@ -525,13 +509,13 @@ const gc = document.createElement('canvas');                      // full frame 
 const gctx = gc.getContext('2d', {willReadFrequently:true});
 const shotc = document.createElement('canvas');                   // the picture we show
 
-let stream=null, track=null, caps={}, frozen=false, speakOn=load('dalton.speak',true);
+let stream=null, track=null, caps={}, frozen=false;
 let simple = load('dalton.simple', false);
 let sampleFactor = load('dalton.size', 0.10);
 let sens = load('dalton.sens','high');
 let bracketOn = load('dalton.bracket', true);
-let ema=null, stableName='', stableCount=0, spokenName='', wakeLock=null;
-let mode='live', shot=null, selIdx=0, busy=false;
+let ema=null, wakeLock=null;
+let mode='live', shot=null, busy=false;
 
 /* ---------- camera ---------- */
 async function start(){
@@ -600,7 +584,6 @@ function render(a, b){
   paintName(r.label, r.note, r.cls, r.swatch);
   elStats.textContent = statLine(hue, r.band, st, a);
   drawBar(hue, r.band);
-  maybeSpeak(r.label, r.cls);
 }
 
 function paintName(label, note, cls, swatch){
@@ -719,19 +702,20 @@ async function scan(){
 
   shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, peak:det.peak, frac:det.frac,
            nRaw:det.blobs.length, evs:frames.map(f=>f.ev) };
-  mode='scan'; selIdx=0;
+  mode='scan';
   paintShutter();
-  ov.classList.add('on'); ret.classList.add('hide'); panel.classList.add('scan');
-  const sv=$('save'); sv.classList.add('on'); sv.classList.remove('done','fail'); sv.textContent='SAVE';
-  $('frozen').textContent='SCAN'; 
-  drawOverlay(); buildList(); showSel(); speakSummary();
+  ov.classList.add('on'); ret.classList.add('hide');
+  panel.style.display = 'none';                 // the picture is the answer; nothing covers it
+  $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
+  const sv=$('save'); sv.classList.remove('done','fail'); sv.textContent='SAVE';
+  drawOverlay();
   busy=false; $('shutter').disabled=false;
 }
 
 function toLive(){
-  mode='live'; shot=null; ema=null; spokenName=''; stableCount=0;
-  ov.classList.remove('on'); ret.classList.remove('hide'); panel.classList.remove('scan');
-  $('save').classList.remove('on','done','fail');
+  mode='live'; shot=null; ema=null;
+  ov.classList.remove('on'); ret.classList.remove('hide');
+  panel.style.display = '';
   $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
   frozen=false;
   paintShutter();
@@ -744,11 +728,6 @@ function coverMap(){
   return {s, dx:(cw - shot.W*s)/2, dy:(ch - shot.H*s)/2, cw, ch};
 }
 
-function shortLabel(s){
-  if(s.indexOf(' OR ') > 0) return s.split(' OR ').map(w=>w.slice(0,3)).join('/');
-  if(s === 'NO CLEAR COLOUR') return 'NO COLOUR';
-  return s;
-}
 function rrect(g,x,y,w,h,r){
   g.beginPath();
   g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
@@ -765,18 +744,17 @@ function drawOverlay(){
   g.setTransform(dpr,0,0,dpr,0,0);
   g.clearRect(0,0,m.cw,m.ch);
   g.drawImage(shotc, m.dx, m.dy, shot.W*m.s, shot.H*m.s);
-  g.fillStyle='rgba(0,0,0,.30)'; g.fillRect(0,0,m.cw,m.ch);   // so white text stays legible
 
   const placed=[];
   shot.leds.forEach((b,i)=>{
     const X = m.dx + b.cx*m.s, Y = m.dy + b.cy*m.s;
     const R = Math.max(13, (b.rad + b.pad)*m.s);
-    const on = (i===selIdx);
-    b.hit = {x:X, y:Y, r:Math.max(R, 26)};
-
-    const txt = (i+1) + '  ' + shortLabel(b.res.label) + (!b.res.sure && b.res.label.indexOf('/')<0 && b.res.label.indexOf(' OR ')<0 ? ' ?' : '');
-    g.font = 'bold 15px system-ui,sans-serif';
-    const pw = g.measureText(txt).width + 15, ph = 25;
+    // The hue is shown only on a name that is not confident — that is the one case
+    // where the number is worth reading, and the one to report for calibration.
+    const txt = b.res.label + (!b.res.sure && b.res.hue !== null
+                               ? '  ' + b.res.hue.toFixed(0) + '\u00b0' : '');
+    g.font = 'bold 17px system-ui,sans-serif';
+    const pw = g.measureText(txt).width + 16, ph = 28;
     let box = null;
     const cands = [[X+R+9, Y-ph/2], [X-R-9-pw, Y-ph/2], [X-pw/2, Y-R-9-ph], [X-pw/2, Y+R+9]];
     for(const c of cands){
@@ -799,14 +777,14 @@ function drawOverlay(){
     g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=1.2;
     g.beginPath(); g.moveTo(X,Y); g.lineTo(box.x+pw/2, box.y+ph/2); g.stroke();
 
-    g.lineWidth = on?6:4; g.strokeStyle='#000';
+    g.lineWidth = 5; g.strokeStyle='#000';
     g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
-    g.lineWidth = on?3.2:1.8; g.strokeStyle = on ? '#fff' : '#cbd5e1';
+    g.lineWidth = 2.2; g.strokeStyle='#fff';
     g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
 
-    g.fillStyle = on ? 'rgba(45,108,223,.95)' : 'rgba(8,10,13,.9)';
+    g.fillStyle = 'rgba(8,10,13,.92)';
     rrect(g, box.x, box.y, pw, ph, 7); g.fill();
-    g.strokeStyle = on ? '#fff' : 'rgba(255,255,255,.5)'; g.lineWidth = on?2:1;
+    g.strokeStyle = '#fff'; g.lineWidth = 1.4;
     rrect(g, box.x, box.y, pw, ph, 7); g.stroke();
     g.fillStyle='#fff'; g.textAlign='left'; g.textBaseline='middle';
     g.fillText(txt, box.x+8, box.y+ph/2+0.5);
@@ -814,73 +792,30 @@ function drawOverlay(){
   });
 
   if(!shot.leds.length){
-    g.font='bold 17px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
-    g.fillStyle='rgba(0,0,0,.8)';
-    rrect(g, m.cw/2-110, m.ch/2-20, 220, 40, 10); g.fill();
+    g.font='bold 18px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillStyle='rgba(0,0,0,.85)';
+    rrect(g, m.cw/2-120, m.ch/2-22, 240, 44, 10); g.fill();
+    g.strokeStyle='#fff'; g.lineWidth=1.4; rrect(g, m.cw/2-120, m.ch/2-22, 240, 44, 10); g.stroke();
     g.fillStyle='#fff'; g.fillText('NO LIGHT FOUND', m.cw/2, m.ch/2);
+  }
+
+  const foot = footText();
+  if(foot){
+    g.font='12px system-ui,sans-serif'; g.textAlign='left'; g.textBaseline='bottom';
+    const fw = g.measureText(foot).width + 12;
+    g.fillStyle='rgba(0,0,0,.72)'; g.fillRect(0, m.ch-20, Math.min(fw, m.cw), 20);
+    g.fillStyle='#cbd5e1'; g.fillText(foot, 6, m.ch-5);
   }
 }
 
-function buildList(){
-  const host = $('list'); host.innerHTML='';
-  shot.leds.forEach((b,i)=>{
-    const d=document.createElement('div');
-    d.className = 'li' + (i===selIdx ? ' sel' : '');
-    d.innerHTML = '<div class="num">'+(i+1)+'</div><div class="lt"><b>'+esc(b.res.label)+'</b>'
-      + '<span>' + (b.res.hue===null ? '' : 'hue '+b.res.hue.toFixed(0)+'° · ')
-      + esc(b.res.note) + '</span></div>';
-    d.addEventListener('click', ()=>{ select(i, true); });
-    host.appendChild(d);
-  });
-  const t = footText();
-  if(t){ const d=document.createElement('div'); d.className='li foot'; d.textContent=t; host.appendChild(d); }
-}
-
-// Say out loud what was thrown away. A silent cap reads as "that is everything".
+// Say what was thrown away. A silent cap reads as "that is everything".
 function footText(){
   const d=shot.drop, p=[];
   if(d.small) p.push(d.small+' too small');
   if(d.big)   p.push(d.big+' too large');
-  if(d.over)  p.push(d.over+' beyond the first '+MAX_LEDS);
-  let s = 'threshold ' + shot.T + '/255 of peak ' + shot.peak
-        + (shot.frac > (SENS[sens]||SENS.med) + 1e-6 ? ' (raised: bright background)' : '')
-        + ' · ' + shot.evs.length + (shot.evs.length===1 ? ' exposure' : ' exposures');
-  if(p.length) s = 'ignored ' + p.join(', ') + '\n' + s;
-  return s;
-}
-
-function select(i, speakIt){
-  if(!shot || !shot.leds.length) return;
-  selIdx = i;
-  drawOverlay(); buildList(); showSel();
-  if(speakIt) say('number ' + (i+1) + ', ' + shot.leds[i].res.label);
-}
-
-function showSel(){
-  if(!shot.leds.length){
-    paintName('NO LIGHT', 'Nothing bright and isolated enough to be an indicator. Try "loose" in settings.', 'bad', '#000');
-    elStats.textContent = footText();
-    return;
-  }
-  const b = shot.leds[selIdx], r = b.res, m = b.meas;
-  paintName(r.label, '#'+(selIdx+1)+' — '+r.note, r.cls, r.swatch);
-  const st = m.pick.src || m.a;
-  elStats.textContent = statLine(r.hue, r.band, st, m.a)
-    + '\nblob ' + b.area + 'px  pad ' + b.pad + '  ev ' + (m.ev>0?'+':'') + m.ev
-    + '  of ' + shot.leds.length;
-}
-
-function speakSummary(){
-  const n = shot.leds.length;
-  if(!n){ say('no lights found'); return; }
-  const counts = {}, order = [];
-  shot.leds.forEach(b=>{
-    const k = b.res.label.toLowerCase();
-    if(counts[k]===undefined){ counts[k]=0; order.push(k); }
-    counts[k]++;
-  });
-  const parts = order.map(k => counts[k]>1 ? counts[k]+' '+k : 'one '+k);
-  say(n + (n===1 ? ' light: ' : ' lights: ') + parts.join(', '));
+  if(d.over)  p.push(d.over+' past the first '+MAX_LEDS);
+  if(shot.frac > (SENS[sens]||SENS.med) + 1e-6) p.push('threshold raised for a bright background');
+  return p.length ? 'ignored: ' + p.join(', ') : '';
 }
 
 // Hand the captured frame back to the machine. Everything here stays on the phone —
@@ -888,7 +823,8 @@ function speakSummary(){
 // algorithm can be tested against a real camera instead of synthetic images.
 async function saveFrame(){
   const btn = $('save');
-  if(!shot || btn.classList.contains('done')) return;
+  if(btn.classList.contains('done')) return;
+  if(!shot){ btn.textContent = 'NO SCAN YET'; return; }
   btn.textContent = 'SAVING';
   try{
     const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
@@ -916,51 +852,21 @@ async function saveFrame(){
     if(!r.ok || !j.ok) throw new Error('server said no');
     btn.textContent = 'SAVED ' + j.saved; btn.classList.add('done');
   }catch(e){
-    btn.textContent = 'FAILED'; btn.classList.add('fail');
-    elNote.textContent = 'Could not save the frame: ' + (e.message||e)
-      + ' — is the page served by serve.sh?';
-    elNote.className = 'bad';
+    btn.textContent = 'FAILED — run serve.sh'; btn.classList.add('fail');
   }
 }
 
 function renameAll(){
   if(!shot) return;
   shot.leds.forEach(b=> b.res = nameBlob(b));
-  drawOverlay(); buildList(); showSel();
-}
-
-/* ---------- speech ---------- */
-function maybeSpeak(label, cls){
-  if(label === stableName) stableCount++; else { stableName = label; stableCount = 1; }
-  if(stableCount !== 3) return;                      // fire once, after 3 agreeing frames
-  if(label === spokenName) return;
-  spokenName = label;
-  say((cls === 'ok' || label.indexOf(' OR ') > 0) ? label : label + ', uncertain');
-}
-function say(text){
-  if(!speakOn || !window.speechSynthesis) return;
-  try{ speechSynthesis.cancel();
-       const u = new SpeechSynthesisUtterance(String(text).toLowerCase());
-       u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
+  drawOverlay();
 }
 
 /* ---------- interaction ---------- */
-cam.addEventListener('click', ev=>{
-  if(mode==='scan'){
-    const rect = cam.getBoundingClientRect();
-    const px = ev.clientX-rect.left, py = ev.clientY-rect.top;
-    let bi=-1, bd=1e9;
-    shot.leds.forEach((b,i)=>{
-      if(!b.hit) return;
-      const d = Math.hypot(b.hit.x-px, b.hit.y-py);
-      if(d < b.hit.r && d < bd){ bd=d; bi=i; }
-    });
-    if(bi>=0) select(bi, true);
-    return;
-  }
+cam.addEventListener('click', ()=>{
+  if(mode==='scan') return;                 // the picture is for reading, not poking
   frozen = !frozen;
   $('frozen').classList.toggle('on', frozen);
-  if(frozen){ spokenName=''; say(elName.textContent); }
 });
 
 $('shutter').addEventListener('click', e=>{
@@ -974,15 +880,10 @@ function paintShutter(){
 }
 
 $('save').addEventListener('click', e=>{ e.stopPropagation(); saveFrame(); });
-$('bSpeak').addEventListener('click', e=>{
-  e.stopPropagation(); speakOn=!speakOn; save('dalton.speak',speakOn);
-  $('bSpeak').classList.toggle('off', !speakOn);
-});
 $('bMode').addEventListener('click', e=>{
   e.stopPropagation();
   simple = !simple; save('dalton.simple', simple);
   paintMode();
-  spokenName=''; stableCount=0;            // re-announce in the new vocabulary
   if(mode==='scan') renameAll();           // the stored readings are still good
 });
 function paintMode(){
@@ -993,7 +894,7 @@ function paintMode(){
 
 $('bSet').addEventListener('click', e=>{ e.stopPropagation(); $('sheet').classList.add('on'); });
 $('closeS').addEventListener('click', ()=> $('sheet').classList.remove('on'));
-$('go').addEventListener('click', ()=>{ say('ready'); start(); });
+$('go').addEventListener('click', start);
 
 document.querySelectorAll('[data-size]').forEach(b=>{
   b.addEventListener('click', ()=>{
@@ -1074,7 +975,6 @@ $('resetB').addEventListener('click', ()=>{
 });
 
 markSizes(); markSens(); markBracket(); buildBounds(); paintMode(); paintShutter();
-$('bSpeak').classList.toggle('off', !speakOn);
 if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
   $('err').textContent = 'This browser exposes no camera API. Open the page over http://localhost or https://.';
 </script>

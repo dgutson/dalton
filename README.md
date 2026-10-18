@@ -86,10 +86,14 @@ matter, so it gets its own name instead of being swallowed by GREEN.
 
 ## Controls
 
-    tap image      freeze / unfreeze, and speak the reading
+    SCAN / LIVE    capture and name every LED at once, or go back to the reticle
+    tap image      freeze / unfreeze (live mode only)
     FULL / SIMPLE  switch between nine colour names and red/yellow/green/other
-    speaker icon   speech on / off (spoken only when the name changes)
-    gear icon      sample size, exposure, white-balance lock, boundary calibration
+    gear icon      sample size, scan settings, exposure, white-balance lock,
+                   boundary calibration, save-for-debugging
+
+There is no speech. The answer is a word on the screen; reading it out adds nothing
+for someone who is colourblind rather than blind.
 
 Exposure and white-balance lock are only offered if the camera reports them; many
 Android cameras expose exposure compensation but not manual white balance.
@@ -97,9 +101,18 @@ Android cameras expose exposure compensation but not manual white balance.
 ## Scan mode — naming every LED in one picture
 
 `SCAN` freezes a frame and names each light in it; `LIVE` goes back to the reticle.
-Each light gets a numbered ring on the picture and a row in the list below it. Tap a
-ring or a row to select it — the big readout, the hue and the stats then describe that
-one light, which is how you report a hue for calibration.
+
+The captured picture fills the screen. Every light gets a ring and its name beside it,
+and that is the whole interface — one button to go back, nothing to tap, no panel
+underneath. A readout that covers the picture it is describing is worse than no
+readout.
+
+The measured hue is printed after the name **only when the name is not confident**.
+That is the one case where the number is worth reading, and the one to quote when
+moving a boundary. Confident names stay as just a word.
+
+Anything the scan threw away is reported in small text along the bottom edge — what
+was ignored and why. A silent cap reads as "that is everything".
 
 ### How it finds them
 
