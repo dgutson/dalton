@@ -100,8 +100,14 @@ matter, so it gets its own name instead of being swallowed by GREEN.
     tap image      freeze / unfreeze (live mode only)
     FULL / SIMPLE  switch between nine colour names and red/yellow/green/other
     speaker icon   speak the name aloud (live mode only)
-    gear icon      sample size, scan settings, exposure, white-balance lock,
+    gear icon      sample size, scan sensitivity, exposure, white-balance lock,
                    boundary calibration
+
+Scan sensitivity is **strict / normal / loose**, and it sets three numbers together:
+the minimum saturation a pixel needs to count as coloured, how far below the peak the
+threshold sits, and the smallest blob that counts as a light. It ships on *normal*,
+which finds every LED in the corpus with no false alarms; *loose* trades that for
+picking up a faint one, *strict* for being certain.
 
 The speaker icon speaks the name in **live mode only**, once it has held steady for
 three frames. Scan mode stays silent: the picture already carries every name, and
@@ -130,59 +136,75 @@ was ignored and why. A silent cap reads as "that is everything".
 
 No OpenCV. It would be about 9 MB of WebAssembly, vendored locally because this app is
 offline, to get a connected-components pass that is fifty lines of JavaScript — and it
-would not touch the part that is actually hard. Finding the LEDs is the easy half:
+would not touch the part that is actually hard.
 
-1. **Threshold twice and OR the results**, because each test is blind to what the
-   other sees:
-   - *local* — how far a pixel rises above its own surroundings, measured against a
-     grey opening of the frame on a coarse grid. Scale-free, so a dim activity LED on
-     a dark bezel passes as easily as a blazing power LED. Blind to a light so large
-     it becomes its own background.
-   - *global* — a fraction of the brightest pixel in the frame. Catches that large
-     light, and nothing dimmer than the fraction.
+The hard part is that "bright" is the wrong question. A sunlit window, a chrome screw
+and a white wall are all brighter than an indicator LED. The right question is **what
+is emitting**, and that has a clean physical answer:
 
-   Global alone is what shipped first, and on a seven-LED router panel it found the
-   top one and lost the six below it: the power LED set a bar the rest could not
-   clear. See *Why one threshold was not enough* below.
-2. **Connected components**, 8-connected, iterative — recursion would blow the stack on
+> An LED emits a narrow band of wavelengths, so when it clips it clips *coloured*.
+> A highlight reflects the room's illuminant, so when it clips it clips *white*.
+
+Measured on the first real capture — a router on a desk, thirteen regions over value
+245 — the seven LEDs had a 75th-percentile saturation between 0.45 and 0.83 and the six
+specular highlights sat at 0.07. There is no overlap, and nothing to tune.
+
+So:
+
+1. **Blur 3x3**, separable, over both value and saturation. One hot pixel is sensor
+   grain, not a light.
+2. **Take the peak over coloured pixels only** — those at or above the sensitivity's
+   minimum saturation, and bright enough for saturation to mean anything at all (value
+   60; below that the ratio is noise). A white window never enters the peak, so it
+   cannot raise the bar for everything else.
+3. **Threshold at the peak less a few counts**, floored at 200. An indicator LED bright
+   enough to read as "on" against a room the camera has exposed for sits at the top of
+   the range — every LED in every real capture so far peaks at 255. Making the
+   threshold relative to that peak adapts it to the scene for free. The floor is high
+   for the opposite reason: if nothing coloured in frame is near clipping then there is
+   no emitter in shot, and whatever passes is wood grain. At a floor of 120 an empty
+   room drew 24 rings; at 200 it says NO LIGHT FOUND.
+4. **Connected components**, 8-connected, iterative — recursion would blow the stack on
    a blob of a few thousand pixels.
-3. **Pad outwards** from each blob and read the colour *there*. This is the whole point.
+5. **Drop the wrong shapes.** An LED is small (2% of the frame is already enormous),
+   roughly round (aspect under 3) and solid (filling at least 45% of its box). A streak
+   of glare along a window frame is none of the three.
+6. **Rank by mean saturation times peak, keep the best 24, and only then sort into
+   reading order.** Capping in reading order is a bug that looks like a detector
+   failure: the top edge of the frame spends the whole label budget before the panel is
+   reached.
+7. **Pad outwards** from each blob and read the colour *there*. This is the whole point.
    A clipped core carries no hue (see above); the unclipped fringe around it does. The
    padding stops halfway to the nearest neighbour, and pixels labelled as a *different*
    blob are skipped, so two adjacent LEDs cannot bleed into each other.
-4. **Name it** with exactly the same code the live reticle uses — one implementation of
+8. **Name it** with exactly the same code the live reticle uses — one implementation of
    the bands, the simplified buckets and the hedging, so the two modes can never
    disagree. A fringe whose hue vectors cancel out — agreement below 0.50 — is not
    named at all: that is a grey fringe pointing every direction at once, and naming it
    produced a white LED confidently called VIOLET.
 
-### Why one threshold was not enough
+### Why the first two detectors failed
 
-A global threshold is `max(100, peak x fraction)`. Every number in it is set by the
-single brightest pixel anywhere in shot, so:
+Both of them shipped, and both failed on the same photograph: a seven-LED router column
+against wood panelling.
 
-- a router's power LED, or a lamp in the corner of the frame, raises the bar for every
-  other LED;
-- an indicator at value 120 is invisible at any sensitivity once something hits 255;
-- and the floor of 100 discards anything dimmer than that outright.
+**A fraction of the brightest pixel** found the top LED and lost the six below it.
+Every number in it is set by the single brightest thing anywhere in shot, so the power
+LED set a bar the rest could not clear, an indicator at value 120 was invisible once
+anything hit 255, and a floor of 100 discarded anything dimmer outright.
 
-Local contrast has none of those properties. The background estimate is a grey opening
-— erode, then dilate — on a grid of blocks about a thirtieth of the frame. Eroding
-deletes anything smaller than the window, which is every LED; dilating puts the level
-back, so the estimate is the scene without its lights. The dilation is deliberately the
-wider of the two, because a symmetric opening leaves a false ridge along any hard
-bright edge (a window frame, a monitor bezel) and a ridge reads as a row of lights.
+**Local contrast** — how far a pixel rises above a grey opening of its own surroundings
+— is scale-free, and on the synthetic scenes of the day it was perfect. On the real
+frame it labelled 24 fragments of wood grain and still found one LED. The reason is
+measurable: the LEDs rose 141 to 204 above their surroundings and the frame's own 99th
+percentile of local rise was 153. No threshold separates those. Worse, every false
+positive it added was *reflective* — a yellow ethernet cable, a fern, sunlit wood —
+because local contrast cannot tell a light from a thing that is lit.
 
-Measured on the synthetic scenes, old versus new, at loose sensitivity:
-
-                                     global only    both
-    router, 7 LEDs top to bottom        3 / 7       7 / 7
-    5 LEDs beside a blown-out window    1 / 5       5 / 5
-    close-up, 1 huge LED + 2 small      2 / 3       3 / 3
-    empty room (false alarms)             0           0
-
-The last row is why the value is blurred 3x3 first: without it, the loose threshold
-finds sensor grain.
+The synthetic scenes had not caught it because they modelled a dim LED that does not
+clip, and wood that does not exist. Real indicator LEDs always clip. The scenes were
+rebuilt from measurements off the real capture, and the detector was rebuilt around the
+one property a reflector cannot fake.
 
 ### Why the captured frame is shown whole
 
@@ -196,8 +218,9 @@ frame is letterboxed instead, so everything that was found can be seen.
 
 **It does not drop a doubtful light.** A spare false positive is cheap to ignore on
 screen; a missing LED is not. So a blob whose surroundings are nearly as bright as it
-is gets *flagged* ("background nearly as bright") rather than discarded, and the
-default sensitivity is the loose one.
+is gets *flagged* ("background nearly as bright") rather than discarded, and a hue that
+lands near a boundary is reported as RED OR YELLOW rather than resolved to the nearer
+side.
 
 **It does not cap silently.** The footer says what was ignored and why, the threshold it
 used, and how many exposures it took. A silent cap reads as "that is everything".
@@ -205,27 +228,50 @@ used, and how many exposures it took. A silent cap reads as "that is everything"
 ### Bright backgrounds
 
 A lit white wall behind the LEDs used to defeat it completely: at a low threshold the
-wall merges into one giant region that swallows the LEDs inside it, and at a high one
-the LEDs survived detection only to be thrown out as "not isolated". Both are fixed.
-The global half still steps up (0.82 → 0.90 → 0.95 of peak) if more than a tenth of the
-frame clears it, and the footer says when it did; the local half is unaffected by a
-bright background by construction. Verified against a synthetic wall at value 200
-behind LEDs clipping at 255: two LEDs, correct hues, at every sensitivity.
+wall merged into one giant region that swallowed the LEDs inside it, and at a high one
+the LEDs survived detection only to be thrown out as "not isolated". The emitter rule
+makes it a non-problem. A white wall is white, so it is never a candidate, so it never
+enters the peak and never forms a blob. Verified against a synthetic wall at value 200
+behind LEDs clipping at 255, and against a blown-out window beside five LEDs: correct
+names at every sensitivity, no extras.
 
-### Exposure bracketing
+### Driving the camera
 
-If the camera exposes `exposureCompensation`, SCAN also takes two darker shots and reads
-each light from whichever one left the most usable fringe. Darker means less clipping
-means more hue survives. It costs about a second; turn it off in settings. Without it,
-or if the camera refuses, it falls back to the single frame.
+A long exposure destroys the answer before any code sees it. In a dark corner the
+camera opens up until all three channels saturate, and the core of a green LED comes
+back [236, 255, 205] — saturation 0.20, hue 58 — which is confidently named YELLOW.
+Nothing downstream recovers that. Subtracting the ambient does not help; the ambient is
+[7, 6, 6]. The same model of LED in a lit room reads hue 150 to 163 and names correctly.
+
+So SCAN does not accept the camera's exposure. It asks for `exposureMode: "manual"` and
+steps `exposureTime` down by a factor of four, three times; a camera with no manual mode
+gets `exposureCompensation` walked to its minimum instead. The darkest frame is read
+first — that is where the reflections have fallen away and only the emitters are left —
+and if it yields nothing, the next brightest, and so on.
+
+At the darkest setting it takes two more shots. A quickly blinking LED is simply absent
+from some frames, which is how one of three green LEDs was being lost; among repeats at
+the same exposure it keeps whichever found the most.
+
+The whole series is saved, not just the frame that was used, so a selection rule can be
+tried offline instead of asking for another photograph. The capture JSON records what
+the camera was asked for, what it reported back, and each frame's median brightness,
+and prints *"camera barely responded to the exposure request"* when the series did not
+actually get darker. A phone that ignores the request should say so rather than look
+like an algorithm bug.
 
 ### Known limits
 
-- A window or a lamp is bright too. It gets found and usually named TOO BRIGHT. Ignore it.
+- A window or a lamp is bright, but it is white, so the emitter rule drops it before it
+  becomes a blob. A *coloured* lamp is a real ambiguity and does get named.
 - Two LEDs closer than a few pixels merge into one blob and get one name.
 - A reflection of an LED on glossy plastic is, to the camera, an LED.
-- None of this has been tested against a real camera yet, only against synthetic scenes
-  with realistic clipping profiles. Every capture is saved (below) so that changes.
+- A dim LED beside a bright one is lost: the bright one sets the threshold. That is the
+  deliberate cost of a relative threshold, and it is in the test output as a
+  `KNOWN LIMIT` row rather than quietly passing.
+- **Whether this phone honours the exposure request is not yet known.** The code asks
+  and the log reports; until a dark-room capture comes back with the series actually
+  getting darker, the dark-room fix is written but unproven.
 
 ## Running it, and handing frames back
 
@@ -264,18 +310,39 @@ found, so a miss or a false positive is visible at a glance.
 ## Tests
 
     pkg install quickjs-ng python-numpy
-    ./tools/check.sh
+    ./tools/check.sh      # real captures first, then synthetic scenes
+    ./tools/lint.sh       # static checks on index.html; run after every edit to it
 
-`tools/scenes.py` plants synthetic LEDs — emissive, gaussian, clipping where they go
-over 255 — on routers, lit walls, window edges and an empty room, and records where
-each one is and what hue it was planted at. `tools/detect_test.js` then runs **the real
-detector and namer, sliced straight out of `index.html` by its own section markers**,
-under quickjs. `tools/label_test.js` does the same for label placement, checking that
-nothing lands off-screen or on top of something else.
+`check.sh` runs two suites, and the order they print in is the point.
+
+**`corpus/`** holds real captures with ground truth checked by eye — where each LED is
+and what colour it actually is. These are the authority. `corpus/0001-cbn-router` is
+the seven-LED router that broke the first two detectors; it has to come back 7/7 with
+no false alarms at every sensitivity. To add one:
+
+    python3 tools/corpus.py add frames/0003 0003-my-switch
+    # then fill in corpus/0003-my-switch/truth.json — LED positions and colours —
+    # and set "verified": true once they have been checked against the picture.
+
+Unverified entries are skipped rather than trusted.
+
+**`tools/scenes.py`** plants synthetic LEDs on routers, lit walls, window edges, a
+close-up and an empty room, and records where each one is and what hue it was planted
+at. Synthetic scenes are a guess about physics, and this guess has been wrong before:
+the first set modelled LEDs that do not clip, and passing it is exactly what let a
+1-of-7 detector ship. They are built from measurements off the real capture now — wood
+running value 90 to 150 with saturation *falling* from 0.20 in its darkest decile to
+0.135 in its brightest — and they earn their keep by being quicker to vary than a
+photograph, not by being believed.
+
+`tools/detect_test.js` runs **the real detector and namer, sliced straight out of
+`index.html` by its own section markers**, under quickjs. `tools/label_test.js` does
+the same for label placement, checking that nothing lands off-screen or on top of
+something else.
 
 There is no second copy of the algorithm anywhere, so there is nothing that can drift.
 An earlier Python transliteration found real bugs but had to be re-synced by hand after
 every edit; running the shipped JavaScript removes that whole class of mistake.
 
-What it will not catch: whether a real camera behaves like the synthetic model. That is
-what the saved frames are for.
+What none of it can catch: whether this phone's camera behaves the way the model says.
+That is what the saved frames are for.
