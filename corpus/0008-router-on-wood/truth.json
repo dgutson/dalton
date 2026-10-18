@@ -1,0 +1,49 @@
+{
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "note": "The seven-LED router again, lit, framed so the wood panelling behind it fills much of the shot. THE CAPTURE THAT CAUGHT THE WORST REGRESSION SO FAR: it came back with fourteen labels. All seven LEDs were right - peak 255, surround 65-87, named GREEN with agreement over 0.99 - and seven more labels sat on top of the picture, five of them specks of wood grain peaking at 243-247 with surroundings at 185-222. They were over the threshold but never clipped, and they were not isolated either, so they failed BOTH of the rules an indicator is supposed to satisfy, and the detector kept them anyway: the isolation test had always flagged and never dropped. Dropping the conjunction took loose on this scene from a mess to a readable picture and cost nothing anywhere else. The tests said OK throughout, because extras were printed and not counted - which is the second thing this capture fixed. EXTRAS: what survives is the blue object and the lit yellow cable region - real reflectors, not texture. Ratchet at today count.",
+ "source": "frames/0012, captured 2026-10-18, roomLevel 3, torch off, sens normal",
+ "leds": [
+  {
+   "y": 514,
+   "x": 376,
+   "expect": "GREEN"
+  },
+  {
+   "y": 551,
+   "x": 374,
+   "expect": "GREEN"
+  },
+  {
+   "y": 587,
+   "x": 372,
+   "expect": "GREEN"
+  },
+  {
+   "y": 623,
+   "x": 370,
+   "expect": "GREEN"
+  },
+  {
+   "y": 658,
+   "x": 368,
+   "expect": "GREEN"
+  },
+  {
+   "y": 692,
+   "x": 366,
+   "expect": "GREEN"
+  },
+  {
+   "y": 726,
+   "x": 364,
+   "expect": "GREEN"
+  }
+ ],
+ "extras": {
+  "strict": 1,
+  "normal": 2,
+  "loose": 1
+ }
+}

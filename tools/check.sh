@@ -44,11 +44,18 @@ def judge(o, leds, tol=20):
         elif lab in w: hedge += 1
     return named, hedge, hit, len(o['leds']) - hit
 
-def cell(named, hedge, hit, extra, total, soft):
+# Extras used to be printed and then ignored, on the grounds that a false positive is
+# cheaper than a missed LED. That was wrong, and a real capture proved it: seven LEDs
+# correctly named and seven specks of wood grain labelled alongside them is not a pass,
+# it is a picture nobody can read. Extras now cost, above a per-entry budget that each
+# capture declares and justifies in its own truth.json.
+def cell(named, hedge, hit, extra, total, soft, budget=0):
     wrong = hit - named - hedge
-    bad = (total - hit) + wrong
+    over = max(0, extra - budget)
+    bad = (total - hit) + wrong + over
     flag = ' ' if soft or not bad else '!'
-    return '%d/%-2d %s%s+%-2d' % (named, total, flag, ('~%d' % hedge) if hedge else '  ', extra), (0 if soft else bad)
+    mark = '+%-2d' % extra if over <= 0 else '+%-2d!' % extra
+    return '%d/%-2d %s%s%s' % (named, total, flag, ('~%d' % hedge) if hedge else '  ', mark), (0 if soft else bad)
 
 fails = 0
 print('REAL CAPTURES (corpus/)      %s' % '   '.join('%-14s' % t for t in tiers))
@@ -64,11 +71,15 @@ for slug in ents:
     # same way a synthetic scene goes in EXPECT_FAIL. The cell still prints the real
     # score, so the miss stays visible; it just does not fail the run.
     lim = t.get('known_limit') or {}
+    # What this capture contains that is not an LED but looks like one, per tier, with
+    # the reason written down next to it. Anything beyond the budget is a failure.
+    bud = t.get('extras') or {}
     try:
         cells = []
         for tier in tiers:
             o = run(path, t['w'], t['h'], tier)
-            c, bad = cell(*judge(o, t['leds']), len(t['leds']), tier in lim)
+            c, bad = cell(*judge(o, t['leds']), len(t['leds']), tier in lim,
+                          bud.get(tier, 0))
             fails += bad; cells.append(c)
     finally: os.unlink(path)
     note = ('  (known limit: %s)' % ', '.join(sorted(lim))) if lim else ''
@@ -88,7 +99,8 @@ for scene, tr in meta['truth'].items():
     note = '  (known limit)' if scene in soft else ''
     print('  %-26s %s%s' % (titles[scene][:26], '   '.join('%-14s' % c for c in cells), note))
 
-print('\nnamed-right / planted,  ~n = hedged on a boundary (correct),  ! = wrong, +n = extra')
+print('\nnamed-right / planted,  ~n = hedged on a boundary (correct),  ! = wrong')
+print('+n = extra,  +n! = more extras than this capture is allowed')
 print('OK' if not fails else '%d LEDs missed or misnamed' % fails)
 sys.exit(1 if fails else 0)
 PY

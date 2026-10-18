@@ -608,7 +608,7 @@ function detectBlobs(data, W, H, tier){
 
   // Shape sanity, and a score to rank by: how colourful, and how bright.
   const maxArea = W*H*MAX_FRAC;
-  const drop = {small:0, big:0, shape:0, over:0, white:0};
+  const drop = {small:0, big:0, shape:0, over:0, white:0, texture:0};
   const blobs = [];
   for(const b of raw){
     const bw = b.x1-b.x0+1, bh = b.y1-b.y0+1;
@@ -698,6 +698,19 @@ function measureBlobs(frames, det, W, H){
     }
     b.surround = sn ? sv/sn : 0;
     b.lowIso = b.surround > b.peak*ISO;
+    // An indicator LED satisfies at least one of the two founding rules: it CLIPS,
+    // because a camera exposing for the room puts any light bright enough to read as
+    // "on" at the top of its range; or it sits in the DARK, with its surroundings
+    // well below it. A thing that does neither is texture.
+    //
+    // Measured on a lit capture of the seven-LED router: the LEDs peak at 255 with
+    // surroundings at 65-87, while five specks of wood grain on the panel behind
+    // them peak at 243-247 — over the threshold but never clipping — with
+    // surroundings at 185-222. They failed both rules at once and still got a label
+    // each. Dropping the AND of the two failures leaves every real LED alone,
+    // including an LED on a brightly lit wall, which does not clear the isolation
+    // test but does clip.
+    if(b.lowIso && b.peak < CLIP){ drop.texture++; continue; }
 
     // Read the colour from whichever exposure kept the most usable pixels.
     let best=null;
@@ -1438,6 +1451,8 @@ function footText(){
   if(d.small) p.push(d.small+' too small');
   if(d.big)   p.push(d.big+' too large');
   if(d.shape) p.push(d.shape+' wrong shape');
+  if(d.white) p.push(d.white+' white, not an emitter');
+  if(d.texture) p.push(d.texture+' lit texture, not a light');
   if(d.over)  p.push(d.over+' weaker than the '+MAX_LEDS+' shown');
   return p.length ? 'ignored: ' + p.join(', ') : '';
 }
