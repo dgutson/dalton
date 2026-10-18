@@ -36,6 +36,12 @@
     color:#fff;font-size:15px;font-weight:800;letter-spacing:.11em;backdrop-filter:blur(6px)}
   #shutter.on{background:var(--sel);border-color:#fff}
   #shutter[disabled]{opacity:.5}
+  #save{position:absolute;right:10px;bottom:12px;height:48px;padding:0 16px;border-radius:999px;
+    border:2px solid rgba(255,255,255,.55);background:rgba(10,12,15,.74);color:#fff;
+    font-size:13px;font-weight:800;letter-spacing:.09em;backdrop-filter:blur(6px);display:none}
+  #save.on{display:block}
+  #save.done{background:#15803d;border-color:#4ade80}
+  #save.fail{background:#7f1d1d;border-color:#f87171}
 
   #panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;gap:9px}
@@ -104,6 +110,7 @@
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
     <button id="shutter">SCAN</button>
+    <button id="save" title="send this frame to the machine">SAVE</button>
   </div>
   <div id="panel">
     <div id="nameRow">
@@ -715,6 +722,7 @@ async function scan(){
   mode='scan'; selIdx=0;
   paintShutter();
   ov.classList.add('on'); ret.classList.add('hide'); panel.classList.add('scan');
+  const sv=$('save'); sv.classList.add('on'); sv.classList.remove('done','fail'); sv.textContent='SAVE';
   $('frozen').textContent='SCAN'; 
   drawOverlay(); buildList(); showSel(); speakSummary();
   busy=false; $('shutter').disabled=false;
@@ -723,6 +731,7 @@ async function scan(){
 function toLive(){
   mode='live'; shot=null; ema=null; spokenName=''; stableCount=0;
   ov.classList.remove('on'); ret.classList.remove('hide'); panel.classList.remove('scan');
+  $('save').classList.remove('on','done','fail');
   $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
   frozen=false;
   paintShutter();
@@ -874,6 +883,46 @@ function speakSummary(){
   say(n + (n===1 ? ' light: ' : ' lights: ') + parts.join(', '));
 }
 
+// Hand the captured frame back to the machine. Everything here stays on the phone —
+// 127.0.0.1 is the Python process that served this page — but it is the only way the
+// algorithm can be tested against a real camera instead of synthetic images.
+async function saveFrame(){
+  const btn = $('save');
+  if(!shot || btn.classList.contains('done')) return;
+  btn.textContent = 'SAVING';
+  try{
+    const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
+    const meta = {
+      w:shot.W, h:shot.H, T:shot.T, peak:shot.peak, frac:shot.frac, evs:shot.evs,
+      sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop,
+      caps:{ exposure: !!(caps && caps.exposureCompensation),
+             wb: !!(caps && caps.whiteBalanceMode) },
+      leds: shot.leds.map((b,i)=>{
+        const m=b.meas, src=m.pick.src;
+        return { n:i+1, cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area, pad:b.pad,
+                 peak:b.peak, surround:Math.round(b.surround), lowIso:!!b.lowIso,
+                 label:b.res.label, note:b.res.note, ev:m.ev,
+                 hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
+                 sat: src ? +(src.sat).toFixed(3) : null,
+                 conc: src ? +(src.conc).toFixed(3) : null,
+                 nUse:m.a.nUse, nClip:m.a.nClip, nGray:m.a.nGray, nDark:m.a.nDark, nPix:m.a.n };
+      })
+    };
+    const head = new TextEncoder().encode(JSON.stringify(meta) + '\n');
+    const body = new Uint8Array(head.length + img.data.length);
+    body.set(head, 0); body.set(img.data, head.length);
+    const r = await fetch('/frame', {method:'POST', body});
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error('server said no');
+    btn.textContent = 'SAVED ' + j.saved; btn.classList.add('done');
+  }catch(e){
+    btn.textContent = 'FAILED'; btn.classList.add('fail');
+    elNote.textContent = 'Could not save the frame: ' + (e.message||e)
+      + ' — is the page served by serve.sh?';
+    elNote.className = 'bad';
+  }
+}
+
 function renameAll(){
   if(!shot) return;
   shot.leds.forEach(b=> b.res = nameBlob(b));
@@ -924,6 +973,7 @@ function paintShutter(){
   b.classList.toggle('on', mode==='scan');
 }
 
+$('save').addEventListener('click', e=>{ e.stopPropagation(); saveFrame(); });
 $('bSpeak').addEventListener('click', e=>{
   e.stopPropagation(); speakOn=!speakOn; save('dalton.speak',speakOn);
   $('bSpeak').classList.toggle('off', !speakOn);

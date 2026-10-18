@@ -153,3 +153,34 @@ or if the camera refuses, it falls back to the single frame.
 - A reflection of an LED on glossy plastic is, to the camera, an LED.
 - None of this has been tested against a real camera yet, only against synthetic scenes
   with realistic clipping profiles.
+
+## Running it, and handing frames back
+
+    ./serve.sh            # http://localhost:8080, loopback only
+
+`serve.py` replaces `python3 -m http.server` for one reason: it accepts
+`POST /frame`, which is how a captured frame gets off the phone's browser and onto
+the filesystem. Everything still stays on the device — 127.0.0.1 is the Python
+process that served the page — but without it the algorithm can only ever be tested
+against synthetic images, which is how both of the last two bugs got shipped in the
+first place.
+
+In scan mode the **SAVE** button posts the frozen frame plus everything the app
+decided about it. The server writes two files per capture:
+
+    frames/0001.rgba    raw RGBA, width*height*4 bytes
+    frames/0001.json    threshold, exposures, hue boundaries, and one record per
+                        LED: position, area, padding, label, hue, saturation,
+                        agreement, and the pixel census (used/clipped/grey/dark)
+
+That JSON is the point. It says not just what the app answered but every number it
+answered from, so a wrong name can be traced to the pixel counts that caused it.
+
+`frames/` is git-ignored — captures are yours, they do not belong in the history.
+
+To look at one:
+
+    python3 tools/rawpng.py frames/0001 --marks
+
+Standard library only: no Pillow, no numpy. `--marks` rings what the app thought it
+found, so a miss or a false positive is visible at a glance.
