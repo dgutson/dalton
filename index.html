@@ -28,6 +28,15 @@
     font-weight:800;font-size:13px;letter-spacing:.14em;padding:5px 12px;border-radius:999px;display:none}
   #frozen.on{display:block}
   #toolbar{position:absolute;top:10px;right:10px;display:flex;gap:8px}
+  /* Suggestion to switch the torch on. Never colour alone: an icon, a full sentence
+     and a labelled button, so it reads the same to anyone. */
+  #flash{position:absolute;left:10px;right:10px;bottom:70px;display:none;align-items:center;gap:10px;
+    padding:9px 11px;border-radius:12px;border:1px solid var(--line);background:rgba(10,12,15,.88);
+    color:var(--fg);font-size:13.5px;line-height:1.25;font-weight:600;backdrop-filter:blur(6px)}
+  #flash.on{display:flex}
+  #flash .k{font-size:21px;line-height:1;flex:none}
+  #flash .go{margin-left:auto;flex:none;height:36px;padding:0 13px;border-radius:9px;
+    border:1px solid #7b8694;background:#2d6cdf;color:#fff;font-weight:800;font-size:13px;letter-spacing:.04em}
   .tbtn{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(10,12,15,.72);
     color:var(--fg);font-size:19px;display:grid;place-items:center;backdrop-filter:blur(6px)}
   .tbtn.off{color:#6b7682}
@@ -91,6 +100,12 @@
       <button class="tbtn" id="bSpeak" title="speak the name (live mode)">&#128266;</button>
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
+    <div id="flash">
+      <span class="k">&#128294;</span>
+      <span>Dark room, and the light in the circle is blowing out to white. The flash will
+            make the camera stop down and the colour read truer.</span>
+      <button class="go" id="flashGo">FLASH ON</button>
+    </div>
     <button id="shutter">SCAN</button>
   </div>
   <div id="panel">
@@ -152,7 +167,11 @@
     <div class="lab">Lock white balance</div>
     <button class="sbtn" id="wbBtn">auto</button>
   </div>
-  <p class="hint">Lower exposure if the LED core keeps blowing out to white. Locking white balance stops the camera from cancelling a strong colour cast.</p>
+  <div class="row" id="rowTorch">
+    <div class="lab">Flash (torch)</div>
+    <button class="sbtn" id="torchBtn">off</button>
+  </div>
+  <p class="hint">Lower exposure if the LED core keeps blowing out to white. Locking white balance stops the camera from cancelling a strong colour cast. The flash is the bluntest of the three and usually the one that works: it lights the room, so the camera stops itself down.</p>
 
   <h3>Hue boundaries (°)</h3>
   <div id="bounds"></div>
@@ -774,6 +793,30 @@ function sizeReticle(){
 }
 addEventListener('resize', ()=>{ sizeReticle(); if(mode==='scan') drawOverlay(); });
 
+/* ---------- torch ---------- */
+// The torch is the one exposure lever on this phone that does what it says. Asking
+// for a shorter exposureTime WAS honoured — and blacked the frame out completely,
+// LEDs and all, on the first step of three (see corpus/0003-dark-router). Lighting
+// the room instead gets to the same place from the other side: the camera's own
+// auto exposure stops down, and an LED that was blowing out to white stops doing so.
+let torchOn = false;
+function hasTorch(){
+  const c = caps.torch;                       // boolean on some builds, [false,true] on others
+  return c === true || (Array.isArray(c) && c.indexOf(true) >= 0);
+}
+function setTorch(on){
+  if(!hasTorch()) return Promise.resolve(false);
+  return track.applyConstraints({advanced:[{torch:!!on}]})
+    .then(()=>{ torchOn = !!on; paintTorch(); return true; })
+    .catch(()=>{ torchOn = false; paintTorch(); return false; });
+}
+function paintTorch(){
+  const b = $('torchBtn');
+  b.textContent = torchOn ? 'on' : 'off';
+  b.classList.toggle('sel', torchOn);
+  if(torchOn) hideFlashHint();
+}
+
 /* ---------- speech ----------
    Live mode only. In scan mode the picture already carries every name, so reading
    them aloud would be noise. */
@@ -809,7 +852,39 @@ function updateLiveWb(t){
   const w = 96, h = Math.max(1, Math.round(w*vh/vw));
   if(wbc.width!==w || wbc.height!==h){ wbc.width=w; wbc.height=h; }
   wbx.drawImage(video, 0, 0, w, h);
-  try{ setWhiteBalance(wbx.getImageData(0,0,w,h).data, w, h, 1); }catch(e){ wb={r:1,b:1,n:0}; }
+  let d; try{ d = wbx.getImageData(0,0,w,h).data; }catch(e){ wb={r:1,b:1,n:0}; return; }
+  setWhiteBalance(d, w, h, 1);
+  roomLevel = frameMedian(d, w*h);
+}
+
+// Half the frame darker than this and the room is not lighting the subject: the
+// camera opens up, an LED blows out to white, and its hue stops being readable. The
+// three real captures sit well either side — the lit router has a median of 110, the
+// two dark-room ones 16 and 24.
+const DARK_ROOM = 60;
+let roomLevel = 255;
+function frameMedian(data, n){
+  const h = new Int32Array(256);
+  for(let i=0;i<n;i++){
+    const j=i<<2, R=data[j], G=data[j+1], B=data[j+2];
+    h[R>G ? (R>B?R:B) : (G>B?G:B)]++;
+  }
+  let acc=0; const half=n>>1;
+  for(let v=0;v<256;v++){ acc+=h[v]; if(acc>half) return v; }
+  return 255;
+}
+
+// Suggest the flash only when the thing it fixes is actually on screen: a dark room
+// AND something in the circle that is clipping. A dark room on its own is not a
+// problem to solve, and a clipped core in a lit room is answered by moving back.
+let flashSince = 0, flashLast = -1e9;
+function hideFlashHint(){ flashSince = 0; $('flash').classList.remove('on'); }
+function updateFlashHint(t, a){
+  const want = hasTorch() && !torchOn && roomLevel < DARK_ROOM && a.nClip >= 3;
+  if(want){ if(!flashSince) flashSince = t; flashLast = t; }
+  else if(t - flashLast > 4000) flashSince = 0;   // linger, or a blinking LED strobes it
+  $('flash').classList.toggle('on',
+    flashSince !== 0 && t - flashSince > 1200 && !torchOn && hasTorch());
 }
 
 let last=0;
@@ -825,6 +900,7 @@ function loop(t){
   sctx.drawImage(video, (vw-S)>>1, (vh-S)>>1, S, S, 0, 0, S, S);
   let img; try{ img = sctx.getImageData(0,0,S,S); }catch(e){ return; }
   const t2 = twoPass(img.data, S, 0, 0, S, S, true, null, 0);
+  updateFlashHint(t, t2.a);
   render(t2.a, t2.b);
 }
 
@@ -963,19 +1039,44 @@ async function bracket(){
       exlog.mode = 'manual';
       const base = s0.exposureTime || et.max;
       const lo = et.min;
-      const con = {exposureMode:'manual'};
-      if(caps.iso) con.iso = caps.iso.min;
-      await track.applyConstraints({advanced:[con]});
-      // Four steps down to the shortest the camera will take.
+      // ISO is deliberately left alone. Pinning it to the sensor minimum used to be
+      // part of this step, and in a dark room that is a 64x cut on its own — the
+      // camera had opened up to meet the dark, and this slammed it shut — on top of
+      // the 4x the exposure ladder was already asking for. Measured on
+      // corpus/0003-dark-router: frame medians 24, 1, 1, 1, 1, 1. Every darkened
+      // plane was solid black, the LEDs with it, and the scan fell back to the
+      // auto-exposed frame having spent 1.7 seconds photographing nothing.
+      await track.applyConstraints({advanced:[{exposureMode:'manual'}]});
+
+      // Halve, look at what actually happened, and stop when there is nothing left
+      // to see. The exposureTime the camera REPORTS while still in continuous mode
+      // is not the exposure it is using, so the first request is a guess however it
+      // is computed; what keeps this honest is measuring the frame after each step
+      // rather than trusting the number back.
+      const m0 = median64(series[0].data);
+      const FLOOR_MED = 6;          // below this the frame holds nothing, LED included
+      let e = Math.max(lo, base/2), blacked = 0;
       for(let i=1;i<=3;i++){
-        const want = Math.max(lo, base / Math.pow(4, i));
-        await track.applyConstraints({advanced:[{exposureTime: want}]});
+        await track.applyConstraints({advanced:[{exposureTime: e}]});
         await settle(380);
         const got = settings();
-        series.push({ev:-i, mode:'manual', want, got:got.exposureTime, data:grabFrame().data});
-        exlog.settings.push({step:'manual'+i, want, ...pick(got)});
+        const data = grabFrame().data, med = median64(data);
+        series.push({ev:-i, mode:'manual', want:e, got:got.exposureTime, data});
+        exlog.settings.push({step:'manual'+i, want:e, median:med, ...pick(got)});
+        if(med <= FLOOR_MED){
+          // Overshot. One attempt to climb back towards the exposure we know held an
+          // image, then give up rather than collect more black.
+          blacked++;
+          if(blacked > 1 || e >= base*0.9) break;
+          e = Math.min(base, Math.sqrt(e*base));
+          continue;
+        }
+        if(med <= m0*0.25) break;   // dark enough that the core should have come back
         if(got.exposureTime !== undefined && got.exposureTime <= lo*1.01) break;
+        e = Math.max(lo, e/2);
       }
+      if(blacked) exlog.note += (exlog.note?' · ':'') +
+        'exposure request overshot — ' + blacked + ' frame(s) came back black';
     }else{
       const r = caps.exposureCompensation;
       if(!r) { exlog.note = 'no exposure control at all'; return series; }
@@ -1023,6 +1124,8 @@ async function bracket(){
   exlog.medians = series.map(f => median64(f.data));
   if(series.length > 1 && exlog.medians[series.length-1] > exlog.medians[0]*0.75)
     exlog.note += (exlog.note?' · ':'') + 'camera barely responded to the exposure request';
+  if(series.length > 1 && !series.slice(1).some(f => median64(f.data) > 6))
+    exlog.note += (exlog.note?' · ':'') + 'every darkened frame was black — exposure control is not usable here, try the flash';
   return series;
 }
 
@@ -1096,6 +1199,7 @@ async function scan(){
            // benchmarking on a laptop will tell you
            ms: Math.round(performance.now() - t0), msBracket: Math.round(tBracket) };
   mode='scan';
+  hideFlashHint();          // the live loop stops here, so nothing else would clear it
   paintShutter();
   ov.classList.add('on'); ret.classList.add('hide');
   panel.style.display = 'none';                 // the picture is the answer; nothing covers it
@@ -1231,6 +1335,7 @@ function framePayload(){
     nCol:shot.nCol, evs:shot.evs,
     wb: (shot.gains||[]).map(g=>({r:+g.r.toFixed(3), b:+g.b.toFixed(3), n:g.n})),
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
+    torch:torchOn, roomLevel:roomLevel,
     ms:shot.ms, msBracket:shot.msBracket, tries:shot.tries, exposure:shot.exlog,
     usedEv:shot.usedEv, usedFrame:shot.usedFrame,
     caps:{ exposure: !!(caps && caps.exposureCompensation),
@@ -1392,6 +1497,12 @@ function buildCamControls(){
         .catch(()=>{ btn.textContent='failed'; });
     });
   } else { btn.textContent='n/a'; btn.disabled=true; }
+
+  const tb=$('torchBtn');
+  if(hasTorch()){
+    tb.addEventListener('click', ()=> setTorch(!torchOn));
+    $('flashGo').addEventListener('click', ()=>{ hideFlashHint(); setTorch(true); });
+  } else { tb.textContent='n/a'; tb.disabled=true; }
   markBracket();
 }
 

@@ -113,8 +113,11 @@ The speaker icon speaks the name in **live mode only**, once it has held steady 
 three frames. Scan mode stays silent: the picture already carries every name, and
 reading seven of them aloud is noise.
 
-Exposure and white-balance lock are only offered if the camera reports them; many
-Android cameras expose exposure compensation but not manual white balance.
+Exposure, white-balance lock and the flash are only offered if the camera reports
+them; many Android cameras expose exposure compensation but not manual white balance.
+The flash is the most useful of the three in a dark room — it lights the scene, so the
+camera stops itself down and an LED that was blowing out to white stops doing so — and
+live mode offers it unprompted when it would help.
 
 ## Scan mode — naming every LED in one picture
 
@@ -164,20 +167,32 @@ So:
    for the opposite reason: if nothing coloured in frame is near clipping then there is
    no emitter in shot, and whatever passes is wood grain. At a floor of 120 an empty
    room drew 24 rings; at 200 it says NO LIGHT FOUND.
-4. **Connected components**, 8-connected, iterative — recursion would blow the stack on
-   a blob of a few thousand pixels.
+4. **Connected components on brightness alone**, 8-connected, iterative — recursion
+   would blow the stack on a blob of a few thousand pixels. Saturation is deliberately
+   *not* a condition for joining a blob. An LED bright enough to blow out is white in
+   the middle, so a per-pixel colour gate eats its core and can leave too little above
+   the minimum area: on a dark-room capture of three green LEDs, that gate found one.
 5. **Drop the wrong shapes.** An LED is small (2% of the frame is already enormous),
    roughly round (aspect under 3) and solid (filling at least 45% of its box). A streak
    of glare along a window frame is none of the three.
-6. **Rank by mean saturation times peak, keep the best 24, and only then sort into
+6. **Ask whether the blob is coloured anywhere — two ways, believing whichever says
+   yes.** This is where the emitter rule is actually applied, and the two kinds of LED
+   need opposite evidence. An LED against a lit wall is a hard dot of colour in bright
+   grey, and its rim is wall: 0.49 taken over the dot alone, 0.03 once a collar is
+   included. An LED that blew out is white in the middle with its colour surviving just
+   outside the part that clipped: 0.15 over the core, 0.43 to 0.47 with the collar. So
+   take the 75th percentile of saturation both ways and keep the larger. A specular
+   highlight fails both — white in the middle, dark outside — which is the whole point.
+7. **Rank by that saturation times peak, keep the best 24, and only then sort into
    reading order.** Capping in reading order is a bug that looks like a detector
    failure: the top edge of the frame spends the whole label budget before the panel is
    reached.
-7. **Pad outwards** from each blob and read the colour *there*. This is the whole point.
-   A clipped core carries no hue (see above); the unclipped fringe around it does. The
+8. **Pad outwards** from each blob, then read the colour from **the brightest 30% of
+   what is in that box** — never from the dim fringe at its edge. See below; this is
+   the step that was wrong for the longest. Clipped pixels are still skipped, the
    padding stops halfway to the nearest neighbour, and pixels labelled as a *different*
-   blob are skipped, so two adjacent LEDs cannot bleed into each other.
-8. **Name it** with exactly the same code the live reticle uses — one implementation of
+   blob are ignored, so two adjacent LEDs cannot bleed into each other.
+9. **Name it** with exactly the same code the live reticle uses — one implementation of
    the bands, the simplified buckets and the hedging, so the two modes can never
    disagree. A fringe whose hue vectors cancel out — agreement below 0.50 — is not
    named at all: that is a grey fringe pointing every direction at once, and naming it
@@ -205,6 +220,32 @@ The synthetic scenes had not caught it because they modelled a dim LED that does
 clip, and wood that does not exist. Real indicator LEDs always clip. The scenes were
 rebuilt from measurements off the real capture, and the detector was rebuilt around the
 one property a reflector cannot fake.
+
+### Why reading the fringe was wrong
+
+The third failure was not in finding the LEDs but in reading them, and it survived two
+rounds of fixing the wrong thing.
+
+The rule was: a clipped core carries no hue, so pad outwards and read the unclipped
+fringe. In a lit room that is harmless, because the fringe is still mostly LED. In a
+dark room it is fatal. The camera opens right up, and the fringe becomes mostly *room*
+— the ambient, plus the LED's own glow bouncing off the plastic it is mounted on.
+Across two dark captures of the same switch, six green LEDs read hue 80 to 112 at the
+fringe — yellow, at 0.99 agreement, which is as confidently wrong as this app can be —
+while the bright tops of the very same blobs read 108 to 151, green.
+
+The fringe is not *noisy*, it is **biased**, and that distinction decided the fix.
+Three different weighting schemes were tried, down-weighting the fringe by brightness
+and by its height above the local background; all three landed within ten degrees of
+the yellow/green cut, because no weighting removes a bias. The fringe has to be left
+out. Reading the brightest 30% of each region instead puts all thirteen LEDs across the
+three real captures at least thirteen degrees clear of a band edge.
+
+Letting *clipped* pixels in was tempting for the same reason — they are where the LED's
+own light is strongest — and it was tried and rejected. A pinned channel drags the hue
+towards whichever channel is second, which is towards 60° from both the red side and
+the green side; it cost three LEDs on the synthetic hue sweep and bought nothing the
+brightness cut had not already won.
 
 ### Why the captured frame is shown whole
 
@@ -258,31 +299,51 @@ and one hedged YELLOW OR GREEN, against none right before. On the lit capture it
 very nearly a no-op — hues 150-163 become 151-164 — which is the point. A correction
 that only fires where it is needed is one you can leave switched on.
 
-### Driving the camera
+### Driving the camera, and the flash
 
-Dividing the illuminant out fixes the colour cast, but not the exposure underneath it.
-In a dark corner the camera opens up until all three channels saturate: the core of a
-green LED comes back [236, 255, 205], saturation 0.20, and even after correction its
-fringe reads hue 94 to 135 where the same part in a lit room reads 150 to 163. The
-information is thinner, and one of the three LEDs still only manages YELLOW OR GREEN.
-Subtracting the ambient does not help; the ambient is [7, 6, 6]. The fix has to happen
-before the shutter.
+Dividing the illuminant out fixed the colour cast, and reading the bright part of each
+blob fixed the rest. Exposure was supposed to be the fix for both, and it turned out
+not to be needed for either — which is worth writing down, because the obvious lever
+here is a trap.
 
-So SCAN does not accept the camera's exposure. It asks for `exposureMode: "manual"` and
-steps `exposureTime` down by a factor of four, three times; a camera with no manual mode
-gets `exposureCompensation` walked to its minimum instead. The darkest frame is read
-first — that is where the reflections have fallen away and only the emitters are left —
-and if it yields nothing, the next brightest, and so on.
+SCAN does not accept the camera's exposure. It asks for `exposureMode: "manual"` and
+walks `exposureTime` down, measuring the frame after every step; a camera with no
+manual mode gets `exposureCompensation` walked to its minimum instead. The darkest
+*usable* frame is read first — that is where the reflections have fallen away and only
+the emitters are left — and if it yields nothing, the next brightest, and so on.
 
-At the darkest setting it takes two more shots. A quickly blinking LED is simply absent
-from some frames, which is how one of three green LEDs was being lost; among repeats at
-the same exposure it keeps whichever found the most.
+**The phone honours the request. That was the problem.** On `corpus/0003-dark-router`
+the ladder asked for a quarter of the exposure and got a frame sixty times darker:
+medians 24, 1, 1, 1, 1, 1. Every darkened plane was solid black, the LEDs with it, and
+the scan fell back to the auto-exposed frame having spent 1.7 seconds photographing
+nothing. Two causes, both now fixed:
+
+- The ladder also pinned `iso` to the sensor minimum — 50, from a maximum of 3200. In a
+  dark room the camera had opened up to meet the dark, and this slammed it shut: a 64x
+  cut on its own, on top of the 4x being asked for. ISO is now left alone.
+- The `exposureTime` a camera reports while it is still in *continuous* mode is not the
+  exposure it is using. Dividing that number by four is dividing a fiction. The ladder
+  now halves rather than quarters, measures the frame it actually got after each step,
+  climbs back once if it overshoots, and stops as soon as there is nothing left to see.
+
+**The torch is the lever that works.** It is also the one suggested to you: in live
+mode, when the room is dark *and* something in the circle is clipping — the exact
+conditions under which colour degrades, not merely a dark room — a banner offers to
+switch the flash on. Lighting the room reaches the same place from the other side, by
+making the camera's own auto exposure stop down, and it does not depend on a phone
+honouring a constraint in the way the constraint meant. There is a manual toggle under
+*Settings -> Camera* as well, and whether it was on is recorded with every capture.
+
+At the darkest usable setting it takes two more shots. A quickly blinking LED is simply
+absent from some frames, which is how one of three green LEDs was being lost; among
+repeats at the same exposure it keeps whichever found the most.
 
 The whole series is saved, not just the frame that was used, so a selection rule can be
 tried offline instead of asking for another photograph. The capture JSON records what
-the camera was asked for, what it reported back, and each frame's median brightness,
-and prints *"camera barely responded to the exposure request"* when the series did not
-actually get darker. A phone that ignores the request should say so rather than look
+the camera was asked for, what it reported back, and each frame's median brightness. It
+says *"camera barely responded to the exposure request"* when the series did not get
+darker, and *"every darkened frame was black"* when it got too dark to hold anything. A
+phone that mishandles the request in either direction should say so rather than look
 like an algorithm bug.
 
 ### Known limits
@@ -296,10 +357,14 @@ like an algorithm bug.
   `KNOWN LIMIT` row rather than quietly passing.
 - A scene with no greys in it gets no illuminant estimate, so a strong cast over a
   wholly coloured subject stays uncorrected. Saying nothing beats guessing.
-- **Whether this phone honours the exposure request is not yet known.** The code asks
-  and the log reports; until a dark-room capture comes back with the series actually
-  getting darker, that half of the dark-room fix is written but unproven. The
-  illuminant half is proven, on `corpus/0002-dark-switch`.
+- A brightly lit *saturated* object — a yellow cable catching the sun — clips coloured
+  and is, by the emitter rule, indistinguishable from a large yellow LED. One such
+  region on `corpus/0001-cbn-router` gets a ring. It shows in the test output as an
+  extra rather than being tuned away, because no local measurement separates the two.
+- **Exposure control is a dead end on this phone, and that is now measured** rather
+  than assumed — see above. The dark-room fix came from the illuminant and from where
+  the hue is read, both proven on `corpus/0002-dark-switch` and `0003-dark-router`.
+  The flash is the remaining exposure lever and the only one that behaves.
 
 ## Running it, and handing frames back
 
@@ -344,12 +409,21 @@ found, so a miss or a false positive is visible at a glance.
 `check.sh` runs two suites, and the order they print in is the point.
 
 **`corpus/`** holds real captures with ground truth checked by eye — where each LED is
-and what colour it actually is. These are the authority. `corpus/0001-cbn-router` is
-the seven-LED router that broke the first two detectors; it has to come back 7/7 with
-no false alarms at every sensitivity. To add one:
+and what colour it actually is. These are the authority, and every scan taken with the
+app is added to it, including the ones that pass: a capture that works today is what
+stops tomorrow's fix from breaking it.
 
-    python3 tools/corpus.py add frames/0003 0003-my-switch
-    # then fill in corpus/0003-my-switch/truth.json — LED positions and colours —
+- `0001-cbn-router` — the seven-LED router that broke the first two detectors. 7/7 at
+  every sensitivity, no exceptions.
+- `0002-dark-switch` — the same three green LEDs in a dark corner that broke the colour
+  reading. Still carries a `known_limit` for *strict*, which finds two of the three.
+- `0003-dark-router` — that switch re-shot, and the capture that proved the exposure
+  ladder was blacking the frame out. 3/3 at every sensitivity.
+
+To add one:
+
+    python3 tools/corpus.py add frames/0004 0004-my-switch
+    # then fill in corpus/0004-my-switch/truth.json — LED positions and colours —
     # and set "verified": true once they have been checked against the picture.
 
 Unverified entries are skipped rather than trusted.
@@ -376,4 +450,7 @@ An earlier Python transliteration found real bugs but had to be re-synced by han
 every edit; running the shipped JavaScript removes that whole class of mistake.
 
 What none of it can catch: whether this phone's camera behaves the way the model says.
+Twice now it has not — an auto white balance that warms up in the dark, and an exposure
+request honoured so literally it returned black frames — and both times the only thing
+that revealed it was a real capture with its metadata saved beside it.
 That is what the saved frames are for.
