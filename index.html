@@ -171,6 +171,11 @@
     <div class="lab">Flash (torch)</div>
     <button class="sbtn" id="torchBtn">off</button>
   </div>
+  <button class="sbtn wide" id="probeBtn">Probe what this camera can do</button>
+  <p class="hint">Walks every exposure lever the camera claims to have, one at a time,
+     and records what the sensor actually did with each. Two of them have already
+     turned out to be fiction on this phone, so nothing new gets built on a lever
+     until it has been measured. Saves like a scan; needs <code>serve.sh</code>.</p>
   <p class="hint">Lower exposure if the LED core keeps blowing out to white. Locking white balance stops the camera from cancelling a strong colour cast. The flash is the bluntest of the three and usually the one that works: it lights the room, so the camera stops itself down.</p>
 
   <h3>Hue boundaries (°)</h3>
@@ -1146,6 +1151,110 @@ function median64(data){
   return 0;
 }
 
+/* ---------- camera probe ---------- */
+// Which levers does this camera actually have, and do they move the picture?
+//
+// Two have already died quietly. exposureTime was honoured so literally it returned
+// solid black frames, LEDs and all. The torch may not be exposed at all. Both cost
+// real time because they were built on and only measured afterwards, so before any
+// more arithmetic is built on a parameter axis, this walks every axis the camera
+// claims and records what the sensor actually did. Numbers AND frames: the frames
+// are what a torch-on/torch-off difference has to be tried on.
+function probeStats(d){
+  const h=new Uint32Array(256);
+  let n=0, sr=0, sg=0, sb=0, clip=0;
+  for(let i=0;i<d.length;i+=4*16){
+    const R=d[i], G=d[i+1], B=d[i+2];
+    const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+    h[mx]++; n++; sr+=R; sg+=G; sb+=B; if(mx>=250) clip++;
+  }
+  let c=0, med=0;
+  for(let v=0;v<256;v++){ c+=h[v]; if(c*2>=n){ med=v; break; } }
+  return {med, mean:+((sr+sg+sb)/3/n).toFixed(1), clip:+(clip/n).toFixed(4),
+          r:Math.round(sr/n), g:Math.round(sg/n), b:Math.round(sb/n)};
+}
+
+async function probeCamera(){
+  if(busy || !video.videoWidth || !track) return;
+  busy = true;
+  const btn = $('probeBtn'), label = btn.textContent;
+  btn.textContent = 'PROBING…'; btn.disabled = true;
+  const log = {kind:'camera-probe', caps:{}, settings0:{}, steps:[]};
+  try{ log.caps = track.getCapabilities ? track.getCapabilities() : {}; }catch(e){}
+  try{ log.settings0 = pick(track.getSettings()); }catch(e){}
+  const planes=[], evs=[], vw=video.videoWidth, vh=video.videoHeight;
+
+  async function step(name, constraint){
+    let applied = true, err = null;
+    if(constraint){
+      try{ await track.applyConstraints({advanced:[constraint]}); }
+      catch(e){ applied = false; err = (e && e.name) || String(e); }
+    }
+    await settle(450);                       // auto exposure needs time to re-settle
+    const img = grabFrame();
+    let got = {}; try{ got = pick(track.getSettings()); }catch(e){}
+    log.steps.push({name, want:constraint||null, applied, err, got,
+                    stats:probeStats(img.data)});
+    planes.push(img.data); evs.push(name);
+  }
+
+  try{
+    await step('auto', null);
+    // The torch first, because it is the only lever that can separate an emitter from
+    // a reflector outright: an LED emits the same with it on or off, a lit object
+    // does not. A pair of full frames is exactly what that subtraction needs.
+    const tc = caps.torch;
+    if(tc === true || (Array.isArray(tc) && tc.indexOf(true) >= 0)){
+      await step('torch-on',  {torch:true});
+      await step('torch-off', {torch:false});
+    } else {
+      log.steps.push({name:'torch-on', want:{torch:true}, applied:false,
+                      err:'not in getCapabilities()', got:{}, stats:null});
+    }
+    // ISO is the untried axis, and the clean one: a straight multiplier on
+    // sensitivity. It was only ever used here by accident, slammed to its minimum as
+    // a side effect of the exposure ladder, which is what blacked the frames out.
+    if(caps.iso && caps.iso.max > caps.iso.min){
+      const mid = Math.round(Math.sqrt(caps.iso.min * caps.iso.max));
+      await step('iso-mid-' + mid, {iso: mid});
+      await step('iso-min-' + caps.iso.min, {iso: caps.iso.min});
+    }
+    if(caps.exposureTime && caps.exposureTime.max > caps.exposureTime.min){
+      const now = log.settings0.exposureTime || caps.exposureTime.max;
+      const half = Math.max(caps.exposureTime.min, now/2);
+      await step('exptime-half', {exposureMode:'manual', exposureTime: half});
+    }
+    if(caps.exposureCompensation)
+      await step('ev-min', {exposureCompensation: caps.exposureCompensation.min});
+  }catch(e){ log.error = (e && e.message) || String(e); }
+
+  // Always hand the camera back the way it was found.
+  try{ await track.applyConstraints({advanced:[{torch:false}]}); }catch(e){}
+  try{ await track.applyConstraints({advanced:[{exposureMode:'continuous'}]}); }catch(e){}
+  try{
+    if(log.settings0.exposureCompensation !== undefined)
+      await track.applyConstraints(
+        {advanced:[{exposureCompensation: log.settings0.exposureCompensation}]});
+  }catch(e){}
+
+  try{
+    const head = new TextEncoder().encode(
+      JSON.stringify(Object.assign({w:vw, h:vh, evs}, log)) + '\n');
+    let total = head.length;
+    for(const p of planes) total += p.length;
+    const body = new Uint8Array(total);
+    body.set(head, 0);
+    let at = head.length;
+    for(const p of planes){ body.set(p, at); at += p.length; }
+    const r = await fetch('/frame', {method:'POST', body});
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error('server said no');
+    btn.textContent = 'SAVED ' + j.saved; btn.classList.add('done');
+  }catch(e){ btn.textContent = 'FAILED — run serve.sh'; btn.classList.add('fail'); }
+  setTimeout(()=>{ btn.textContent = label; btn.classList.remove('done','fail'); }, 6000);
+  btn.disabled = false; busy = false;
+}
+
 /* ---------- scan ---------- */
 async function scan(){
   if(busy || !video.videoWidth) return;
@@ -1513,6 +1622,7 @@ function buildCamControls(){
     tb.addEventListener('click', ()=> setTorch(!torchOn));
     $('flashGo').addEventListener('click', ()=>{ hideFlashHint(); setTorch(true); });
   } else { tb.textContent='n/a'; tb.disabled=true; }
+  $('probeBtn').addEventListener('click', probeCamera);
   markBracket();
 }
 

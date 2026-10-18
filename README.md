@@ -326,12 +326,28 @@ nothing. Two causes, both now fixed:
   now halves rather than quarters, measures the frame it actually got after each step,
   climbs back once if it overshoots, and stops as soon as there is nothing left to see.
 
+Before anything else is built on a camera parameter, *Settings -> Probe what this
+camera can do* walks every lever the camera claims to have, one at a time, and saves
+both the numbers and the frames. `python3 tools/probe.py frames/NNNN` reads it back
+and gives a verdict per lever — read off the pixels, never off `getSettings()`, which
+has now been wrong twice. It is cheap insurance against a third time.
+
 **The torch is the lever that works.** It is also the one suggested to you: in live
 mode, when the room is dark *and* something in the circle is clipping — the exact
 conditions under which colour degrades, not merely a dark room — a banner offers to
 switch the flash on. Lighting the room reaches the same place from the other side, by
 making the camera's own auto exposure stop down, and it does not depend on a phone
-honouring a constraint in the way the constraint meant. There is a manual toggle under
+honouring a constraint in the way the constraint meant.
+
+It can do more than that. An LED emits the same light whether the torch is on or off;
+a reflector does not. So a torch-off/torch-on **pair** separates emitter from
+reflector by construction — the one ambiguity that no single frame can resolve, and
+the source of the false positives on `corpus/0004-vertical-router`. The camera
+re-exposes between the two shots by some unknown factor, which rules out comparing
+absolute values, but not directions: with the torch on an emitter goes *dimmer*
+(`E/k`) while a lit object goes *brighter* (`(A+T)/k`), so ranking blobs by that ratio
+works without knowing the factor. `tools/probe.py` runs exactly that test on any probe
+that captured the pair. There is a manual toggle under
 *Settings -> Camera* as well, and whether it was on is recorded with every capture.
 
 At the darkest usable setting it takes two more shots. A quickly blinking LED is simply
