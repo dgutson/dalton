@@ -817,8 +817,11 @@ async function scan(){
   shotc.getContext('2d').drawImage(video,0,0,vw,vh);
 
   let frames, det, out;
+  const t0 = performance.now();
+  let tBracket = 0;
   try{
     frames = await bracket();
+    tBracket = performance.now() - t0;
     det = detectBlobs(frames[0].data, vw, vh, sens);
     out = measureBlobs(frames, det, vw, vh);
   }catch(e){
@@ -829,8 +832,10 @@ async function scan(){
   }
 
   shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, Tloc:det.Tloc,
-           peak:det.peak, frac:det.frac,
-           nRaw:det.blobs.length, evs:frames.map(f=>f.ev) };
+           peak:det.peak, frac:det.frac, nRaw:det.blobs.length, evs:frames.map(f=>f.ev),
+           // how long it actually took on real hardware, which no amount of
+           // benchmarking on a laptop will tell you
+           ms: Math.round(performance.now() - t0), msBracket: Math.round(tBracket) };
   mode='scan';
   paintShutter();
   ov.classList.add('on'); ret.classList.add('hide');
@@ -963,6 +968,7 @@ function framePayload(){
   const meta = {
     w:shot.W, h:shot.H, T:shot.T, Tloc:shot.Tloc, peak:shot.peak, frac:shot.frac, evs:shot.evs,
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
+    ms:shot.ms, msBracket:shot.msBracket,
     caps:{ exposure: !!(caps && caps.exposureCompensation),
            wb: !!(caps && caps.whiteBalanceMode) },
     leds: shot.leds.map((b,i)=>{
