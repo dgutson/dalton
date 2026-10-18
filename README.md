@@ -366,7 +366,10 @@ photograph, not by being believed.
 `tools/detect_test.js` runs **the real detector and namer, sliced straight out of
 `index.html` by its own section markers**, under quickjs. `tools/label_test.js` does
 the same for label placement, checking that nothing lands off-screen or on top of
-something else.
+something else. Because both of those only execute the sliced region, `lint.sh` also
+compiles the whole script block without running it — otherwise everything that touches
+the DOM would never meet a parser, which is how a mangled `async function scan(){`
+once got as far as the phone.
 
 There is no second copy of the algorithm anywhere, so there is nothing that can drift.
 An earlier Python transliteration found real bugs but had to be re-synced by hand after

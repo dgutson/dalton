@@ -69,3 +69,7 @@ for f in ['serve.py'] + sorted('tools/'+x for x in os.listdir('tools') if x.ends
 
 sys.exit(bad)
 PY
+
+# The quickjs tests only execute the sliced pure-computation region, so everything
+# that touches the DOM has never been near a parser. Compile it without running it.
+qjs --std tools/parse_test.js
