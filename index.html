@@ -221,6 +221,51 @@ function bandOf(h){
   return 0;
 }
 
+/* ---------- white balance ---------- */
+// Divide the illuminant out before reading any hue.
+//
+// A camera in a dark room opens up and warms up. Measured on the two real captures:
+// the grey things in frame come back R/G 1.12 in the dark corner against 0.95 in the
+// lit room, and that cast on its own drags a green LED's fringe from hue 150 to 75 —
+// green, named YELLOW, with 0.99 agreement. Confidently wrong is the worst answer
+// this app can give. The scene's own greys are the reference: average every pixel
+// bright enough to trust, not clipped, and nearly neutral, and call that white.
+//
+// Detection never sees the corrected pixels; only hue measurement does. Scaling
+// values before thresholding changes which blobs exist, and on the lit capture that
+// turned seven LEDs into twenty-four rings of wood grain.
+const WB_VMIN = 80;      // saturation is noise below this, and so is the ratio
+const WB_VMAX = 245;     // a clipped pixel is not evidence about the illuminant
+const WB_SMAX = 0.25;    // anything more saturated than this is a coloured thing
+const WB_CLAMP = 1.35;   // a correction larger than this is an estimate gone wrong
+const WB_MINPX = 200;    // below this there is no grey in frame to measure
+let wb = {r:1, b:1, n:0};
+
+// step>1 subsamples; a ninth of the pixels gives the same gains to three decimals.
+function greyGains(data, W, H, step){
+  const k = step || 3;
+  let sr=0, sg=0, sb=0, n=0;
+  for(let y=0;y<H;y+=k){
+    const row = y*W;
+    for(let x=0;x<W;x+=k){
+      const i = (row+x) << 2;
+      const R=data[i], G=data[i+1], B=data[i+2];
+      const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+      if(mx < WB_VMIN || mx >= WB_VMAX) continue;
+      const mn = R<G ? (R<B?R:B) : (G<B?G:B);
+      if((mx-mn)/mx >= WB_SMAX) continue;
+      sr+=R; sg+=G; sb+=B; n++;
+    }
+  }
+  // Too little grey in frame to estimate from — a close-up of a black panel, say.
+  // Leave the pixels alone rather than invent a cast.
+  const lo = 1/WB_CLAMP;
+  const cl = v => Math.min(WB_CLAMP, Math.max(lo, v));
+  return (n < WB_MINPX || sr<=0 || sb<=0) ? {r:1, b:1, n:n}
+                                          : {r:cl(sg/sr), b:cl(sg/sb), n:n};
+}
+function setWhiteBalance(data, W, H, step){ return (wb = greyGains(data, W, H, step)); }
+
 /* ---------- sampling + analysis ---------- */
 const MINSAT = 0.15, MINSAT2 = 0.05, DARK = 28, CLIP = 250;
 
@@ -241,15 +286,20 @@ function analyseRect(data, stride, x0, y0, w, h, minsat, circle, labels, self){
       const p = y*stride + x;
       if(labels){ const L = labels[p]; if(L !== 0 && L !== self) continue; }
       const i = p << 2;
-      const R=data[i], G=data[i+1], B=data[i+2];
+      const R0=data[i], G=data[i+1], B0=data[i+2];
       n++;
-      const mx = R>G ? (R>B?R:B) : (G>B?G:B);
-      const mn = R<G ? (R<B?R:B) : (G<B?G:B);
-      valAll += mx;
-      if(mx < DARK){ nDark++; continue; }
+      const mx0 = R0>G ? (R0>B0?R0:B0) : (G>B0?G:B0);
+      valAll += mx0;
+      if(mx0 < DARK){ nDark++; continue; }
       // Any clipped channel biases hue: the dominant channel caps at 255 while the
       // others keep climbing, dragging red towards amber. Drop these outright.
-      if(mx >= CLIP){ nClip++; continue; }
+      // Clipping and darkness are facts about the sensor reading, so they are judged
+      // on the raw value; hue and saturation are facts about the light, so they are
+      // judged after the illuminant is divided out.
+      if(mx0 >= CLIP){ nClip++; continue; }
+      const R = R0*wb.r, B = B0*wb.b;
+      const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+      const mn = R<G ? (R<B?R:B) : (G<B?G:B);
       const d = mx - mn, s = d / mx;
       if(s < minsat){ nGray++; continue; }
 
@@ -260,7 +310,7 @@ function analyseRect(data, stride, x0, y0, w, h, minsat, circle, labels, self){
       hh = norm(hh) * Math.PI/180;
 
       sx += s*Math.cos(hh); sy += s*Math.sin(hh); wsum += s;
-      satSum += s; valSum += mx; nUse++;
+      satSum += s; valSum += mx0; nUse++;
     }
   }
   const conc = wsum>0 ? Math.hypot(sx,sy)/wsum : 0;   // 1 = every pixel agrees on hue
@@ -512,6 +562,10 @@ const MAX_LEDS = 24;
 
 function measureBlobs(frames, det, W, H){
   const {labels, val, blobs, drop} = det;
+  // One illuminant estimate per exposure, computed once rather than per blob. Each
+  // exposure in the series is a different reading of the same room, so each gets its
+  // own: the darkest frame has the least to divide out.
+  const gains = frames.map(f => greyGains(f.data, W, H, 3));
 
   // Cap by QUALITY, not by position. The blobs arrive sorted best-first, so this
   // keeps the most LED-like ones; reading order is applied afterwards, for display.
@@ -551,11 +605,14 @@ function measureBlobs(frames, det, W, H){
 
     // Read the colour from whichever exposure kept the most usable pixels.
     let best=null;
-    for(const f of frames){
+    for(let fi=0; fi<frames.length; fi++){
+      const f = frames[fi];
+      wb = gains[fi];
       const t = twoPass(f.data, W, x0, y0, bw, bh, false, labels, b.id);
       const pick = pickSource(t.a, t.b);
       const score = pick.src ? pick.src.nUse * pick.src.conc * (pick.washed?0.4:1) : -1;
-      if(!best || score > best.score) best = {score, a:t.a, b2:t.b, pick, ev:f.ev};
+      if(!best || score > best.score)
+        best = {score, a:t.a, b2:t.b, pick, ev:f.ev, wb:gains[fi]};
     }
     b.meas = best;
     kept.push(b);
@@ -574,7 +631,7 @@ function measureBlobs(frames, det, W, H){
       b.res.sure = false;
     }
   });
-  return {kept, drop};
+  return {kept, drop, gains};
 }
 
 function nameBlob(b){
@@ -595,6 +652,8 @@ const bctx = bar.getContext('2d');
 const ov = $('ov'), octx = ov.getContext('2d');
 const sc = document.createElement('canvas');                      // live reticle crop
 const sctx = sc.getContext('2d', {willReadFrequently:true});
+const wbc = document.createElement('canvas');                     // whole frame, tiny
+const wbx = wbc.getContext('2d', {willReadFrequently:true});
 const gc = document.createElement('canvas');                      // full frame grabber
 const gctx = gc.getContext('2d', {willReadFrequently:true});
 const shotc = document.createElement('canvas');                   // the picture we show
@@ -665,6 +724,22 @@ function hush(){
 }
 
 /* ---------- live loop ---------- */
+// The reticle samples a patch at the dead centre, which is the LED itself — so the
+// illuminant has to come from the rest of the room. A whole frame scaled to 96 wide
+// is plenty for an average, and once a second is often enough: room light does not
+// change at 7 fps, and this is a phone.
+const WB_MS = 1000;
+let lastWb = -1e9;
+function updateLiveWb(t){
+  if(t - lastWb < WB_MS) return;
+  lastWb = t;
+  const vw=video.videoWidth, vh=video.videoHeight;
+  const w = 96, h = Math.max(1, Math.round(w*vh/vw));
+  if(wbc.width!==w || wbc.height!==h){ wbc.width=w; wbc.height=h; }
+  wbx.drawImage(video, 0, 0, w, h);
+  try{ setWhiteBalance(wbx.getImageData(0,0,w,h).data, w, h, 1); }catch(e){ wb={r:1,b:1,n:0}; }
+}
+
 let last=0;
 function loop(t){
   requestAnimationFrame(loop);
@@ -672,6 +747,7 @@ function loop(t){
   last = t;
   const vw=video.videoWidth, vh=video.videoHeight;
   if(!vw) return;
+  updateLiveWb(t);
   const S = Math.max(16, Math.round(Math.min(vw,vh)*sampleFactor));
   if(sc.width!==S){ sc.width=sc.height=S; sizeReticle(); }
   sctx.drawImage(video, (vw-S)>>1, (vh-S)>>1, S, S, 0, 0, S, S);
@@ -940,6 +1016,7 @@ async function scan(){
   }
 
   shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, minSat:det.minSat,
+           gains:out.gains,
            peak:det.peak, nCol:det.nCol, nRaw:det.nRaw, evs:frames.map(f=>f.ev),
            tries:det.tries, usedEv:det.usedEv, usedFrame:det.usedFrame, exlog,
            frames,                               // kept for the debug upload
@@ -958,7 +1035,7 @@ async function scan(){
 }
 
 function toLive(){
-  mode='live'; shot=null; ema=null;
+  mode='live'; shot=null; ema=null; lastWb=-1e9;   // re-estimate at once
   hush();
   ov.classList.remove('on'); ret.classList.remove('hide');
   panel.style.display = '';
@@ -1080,6 +1157,7 @@ function framePayload(){
   const meta = {
     w:shot.W, h:shot.H, T:shot.T, minSat:shot.minSat, peak:shot.peak,
     nCol:shot.nCol, evs:shot.evs,
+    wb: (shot.gains||[]).map(g=>({r:+g.r.toFixed(3), b:+g.b.toFixed(3), n:g.n})),
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
     ms:shot.ms, msBracket:shot.msBracket, tries:shot.tries, exposure:shot.exlog,
     usedEv:shot.usedEv, usedFrame:shot.usedFrame,
@@ -1094,6 +1172,7 @@ function framePayload(){
                hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
                sat: src ? +(src.sat).toFixed(3) : null,
                conc: src ? +(src.conc).toFixed(3) : null,
+               wb: m.wb ? {r:+m.wb.r.toFixed(3), b:+m.wb.b.toFixed(3)} : null,
                nUse:m.a.nUse, nClip:m.a.nClip, nGray:m.a.nGray, nDark:m.a.nDark, nPix:m.a.n };
     })
   };
