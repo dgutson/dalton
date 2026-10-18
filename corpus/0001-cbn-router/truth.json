@@ -1,19 +1,44 @@
 {
-  "w": 720,
-  "h": 1280,
-  "verified": true,
-  "known_limit": {
-    "strict": "the third LED down has a 2-pixel core at strict's threshold (peak-8 = 247) against its minimum area of 3, so it is dropped as too small; the other six measure 3 to 8. Strict buys precision with recall by construction, and the sensitivity the app ships with is loose. 7/7 at normal and loose is the requirement."
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED. Strict used to lose the third LED down \u2014 its core is 2 pixels at strict's threshold of 247 \u2014 which is why strict's minimum area is 2 and not 3. All three sensitivities must now find all seven.",
+ "source": "frames/0001, captured 2026-10-18",
+ "leds": [
+  {
+   "y": 547,
+   "x": 369,
+   "expect": "GREEN"
   },
-  "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED.",
-  "source": "frames/0001, captured 2026-10-18",
-  "leds": [
-    {"y": 547, "x": 369, "expect": "GREEN"},
-    {"y": 578, "x": 368, "expect": "GREEN"},
-    {"y": 608, "x": 368, "expect": "GREEN"},
-    {"y": 637, "x": 367, "expect": "GREEN"},
-    {"y": 667, "x": 366, "expect": "GREEN"},
-    {"y": 696, "x": 365, "expect": "GREEN"},
-    {"y": 727, "x": 364, "expect": "GREEN"}
-  ]
+  {
+   "y": 578,
+   "x": 368,
+   "expect": "GREEN"
+  },
+  {
+   "y": 608,
+   "x": 368,
+   "expect": "GREEN"
+  },
+  {
+   "y": 637,
+   "x": 367,
+   "expect": "GREEN"
+  },
+  {
+   "y": 667,
+   "x": 366,
+   "expect": "GREEN"
+  },
+  {
+   "y": 696,
+   "x": 365,
+   "expect": "GREEN"
+  },
+  {
+   "y": 727,
+   "x": 364,
+   "expect": "GREEN"
+  }
+ ]
 }

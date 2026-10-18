@@ -398,8 +398,15 @@ function nearestBoundary(h){
 // of seven.
 //
 //                      min saturation,  min area,  how far below the saturated peak
-const TIER  = {low:[0.40,3,8], med:[0.30,2,12], high:[0.20,1,20]};
+const TIER  = {low:[0.40,2,8], med:[0.30,2,12], high:[0.20,1,20]};
 const VFLOOR     = 60;      // saturation is meaningless noise on a dark pixel
+// Absolute floor under the threshold. An indicator LED bright enough to read as "on"
+// against a room the camera has exposed for sits at the top of the range — every LED
+// in every real capture so far peaks at 255. So when the brightest coloured pixel in
+// frame is nowhere near clipping, there is no emitter in shot, and anything that
+// passes is wood grain or a coloured wall. The old floor of 120 let that through:
+// 24 rings on an empty room at loose. Say NO LIGHT FOUND instead.
+const FLOOR      = 200;
 const MAX_FRAC   = 0.02;    // an LED is small; 2% of the frame is already enormous
 const MAX_ASPECT = 3.0;     // and roughly round, not a streak along an edge
 const MIN_FILL   = 0.45;    // and solid, not a ragged outline
@@ -442,7 +449,7 @@ function detectBlobs(data, W, H, tier){
     if(smS[p] < minSat || smV[p] < VFLOOR) continue;
     nCol++; if(val[p] > peak) peak = val[p];
   }
-  const T = Math.max(120, peak - belowPeak);
+  const T = Math.max(FLOOR, peak - belowPeak);
 
   const mask = new Uint8Array(N);
   for(let p=0;p<N;p++)
