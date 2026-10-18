@@ -1,0 +1,24 @@
+{
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "note": "The same three-LED switch as 0002-dark-switch, re-shot from slightly closer after the exposure-driving code went in. WHAT THIS CAPTURE PROVED, and it was not what it was taken to prove. The camera DID honour the manual exposure request - and that is the problem: see capture.json, where exposureTime steps 4.69 -> 1.17 -> 0.29 -> 0.11 and the frame medians go 24 -> 1, 1, 1, 1, 1. Every darkened plane is solid black, LEDs included, so all six tries but the first found nothing and the app fell back to the auto-exposed frame. The reported exposureTime while the camera is in continuous mode is not the exposure it is actually using, so dividing it by four is dividing a number that means nothing. WHAT ACTUALLY FIXED IT: the app had been reading hue from the unclipped FRINGE of each blob, and in a dark room that fringe is mostly room - the ambient plus the LED's own glow off the plastic it is mounted on. Measured here, the fringe read hue 80, 93 and 81 (yellow, agreement 0.99) while the bright top of the very same blobs read 109, 113 and 108 (green). Reading the brightest 30% instead took this capture from 1 LED found and named YELLOW OR GREEN to 3 found and named GREEN at every tier. The blob at (461,247) is the negative: a small bright reflection off the plastic, saturated enough to look like an indicator, flagged lowIso because its background is nearly as bright. It is not an LED and must never be named one confidently.",
+ "source": "frames/0004, captured 2026-10-18, six exposure planes saved (0004, 0004-e1..e5); e1-e5 are black",
+ "leds": [
+  {
+   "y": 615,
+   "x": 321,
+   "expect": "GREEN"
+  },
+  {
+   "y": 636,
+   "x": 347,
+   "expect": "GREEN"
+  },
+  {
+   "y": 658,
+   "x": 374,
+   "expect": "GREEN"
+  }
+ ]
+}

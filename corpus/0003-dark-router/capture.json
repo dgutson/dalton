@@ -1,0 +1,271 @@
+{
+ "w": 720,
+ "h": 1280,
+ "T": 243,
+ "minSat": 0.3,
+ "peak": 255,
+ "nCol": 28156,
+ "evs": [
+  0,
+  -1,
+  -2,
+  -3,
+  -3,
+  -3
+ ],
+ "wb": [
+  {
+   "r": 0.971,
+   "b": 1.116,
+   "n": 27796
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  }
+ ],
+ "sens": "med",
+ "simple": true,
+ "bounds": [
+  345,
+  18,
+  40,
+  68,
+  88,
+  175,
+  200,
+  250,
+  288
+ ],
+ "drop": {
+  "small": 0,
+  "big": 0,
+  "shape": 0,
+  "over": 0
+ },
+ "nRaw": 2,
+ "ms": 1895,
+ "msBracket": 1740,
+ "tries": [
+  {
+   "i": 5,
+   "ev": -3,
+   "rep": 2,
+   "n": 0,
+   "peak": 0,
+   "T": 200
+  },
+  {
+   "i": 4,
+   "ev": -3,
+   "rep": 1,
+   "n": 0,
+   "peak": 0,
+   "T": 200
+  },
+  {
+   "i": 3,
+   "ev": -3,
+   "rep": 0,
+   "n": 0,
+   "peak": 0,
+   "T": 200
+  },
+  {
+   "i": 2,
+   "ev": -2,
+   "rep": 0,
+   "n": 0,
+   "peak": 0,
+   "T": 200
+  },
+  {
+   "i": 1,
+   "ev": -1,
+   "rep": 0,
+   "n": 0,
+   "peak": 0,
+   "T": 200
+  },
+  {
+   "i": 0,
+   "ev": 0,
+   "rep": 0,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  }
+ ],
+ "exposure": {
+  "mode": "manual",
+  "caps": {
+   "exposureMode": [
+    "continuous",
+    "manual"
+   ],
+   "exposureTime": {
+    "max": 6746.07955,
+    "min": 0.10667,
+    "step": 0.1
+   },
+   "exposureCompensation": {
+    "max": 2,
+    "min": -2,
+    "step": 0.10000000149011612
+   },
+   "iso": {
+    "max": 3200,
+    "min": 50,
+    "step": 1
+   },
+   "whiteBalanceMode": [
+    "continuous",
+    "manual"
+   ]
+  },
+  "settings": [
+   {
+    "step": "start",
+    "ev": 0,
+    "exposureMode": "continuous",
+    "exposureTime": 4.68659,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual1",
+    "want": 1.1716475,
+    "exposureMode": "none",
+    "exposureTime": 1.17164,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual2",
+    "want": 0.292911875,
+    "exposureMode": "none",
+    "exposureTime": 0.29291,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual3",
+    "want": 0.10667,
+    "exposureMode": "none",
+    "exposureTime": 0.10667,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   }
+  ],
+  "note": "",
+  "medians": [
+   24,
+   1,
+   1,
+   1,
+   1,
+   1
+  ]
+ },
+ "usedEv": 0,
+ "usedFrame": 0,
+ "caps": {
+  "exposure": true,
+  "wb": true
+ },
+ "leds": [
+  {
+   "n": 1,
+   "cx": 248,
+   "cy": 461,
+   "area": 2,
+   "pad": 3,
+   "peak": 245,
+   "satc": 0.377,
+   "score": 92,
+   "surround": 196,
+   "lowIso": true,
+   "label": "YELLOW",
+   "note": "confident \u00b7 background nearly as bright, may not be an indicator",
+   "ev": 0,
+   "hue": 41.2,
+   "sat": 0.563,
+   "conc": 0.999,
+   "wb": {
+    "r": 0.971,
+    "b": 1.116
+   },
+   "nUse": 56,
+   "nClip": 0,
+   "nGray": 0,
+   "nDark": 0,
+   "nPix": 56
+  },
+  {
+   "n": 2,
+   "cx": 322,
+   "cy": 615,
+   "area": 3,
+   "pad": 3,
+   "peak": 255,
+   "satc": 0.307,
+   "score": 78,
+   "surround": 142,
+   "lowIso": false,
+   "label": "YELLOW OR GREEN",
+   "note": "UNSURE \u2014 hue 87\u00b0 right on the yellow/green cut",
+   "ev": 0,
+   "hue": 86.6,
+   "sat": 0.428,
+   "conc": 0.968,
+   "wb": {
+    "r": 0.971,
+    "b": 1.116
+   },
+   "nUse": 56,
+   "nClip": 6,
+   "nGray": 10,
+   "nDark": 0,
+   "nPix": 72
+  }
+ ],
+ "stem": "0004",
+ "bytes": 22118400,
+ "planes": [
+  "0004",
+  "0004-e1",
+  "0004-e2",
+  "0004-e3",
+  "0004-e4",
+  "0004-e5"
+ ]
+}
