@@ -1,17 +1,17 @@
 {
- "w": 720,
- "h": 1280,
- "verified": true,
- "note": "A single red indicator on a power brick behind a monitor, in near-total darkness (roomLevel 0), surrounded by coiled orange ethernet cable. One LED, found and named RED at hue 1.3 with saturation 0.88. The cable is the interesting negative: it fills a third of the frame, it is strongly orange, and it is NOT bright enough to clip, so the emitter rule drops all of it. There is a second, dimmer red spot just below the LED - its own reflection on the plastic - which is dropped as too small. A reflection of an LED is, to the camera, an LED, so that is luck rather than judgement, and it is the reason the drop counters are printed in the footer. EXTRAS: at loose only, two faint spots on the orange cable coil. Ratchet at today's count.",
- "source": "frames/0008, captured 2026-10-18, roomLevel 0, torch off",
- "leds": [
-  {
-   "y": 649,
-   "x": 390,
-   "expect": "RED"
+  "w": 720,
+  "h": 1280,
+  "verified": true,
+  "note": "A single red indicator on a power brick behind a monitor, in near-total darkness (roomLevel 0), surrounded by coiled orange ethernet cable. One LED, found and named RED at hue 1.3 with saturation 0.88. The cable is the interesting negative: it fills a third of the frame, it is strongly orange, and it is NOT bright enough to clip, so the emitter rule drops all of it. There is a second, dimmer red spot just below the LED - its own reflection on the plastic - which is dropped as too small. A reflection of an LED is, to the camera, an LED, so that is luck rather than judgement, and it is the reason the drop counters are printed in the footer. EXTRAS: at loose only, two faint spots on the orange cable coil. Ratchet at today's count.",
+  "source": "frames/0008, captured 2026-10-18, roomLevel 0, torch off",
+  "leds": [
+    {
+      "y": 649,
+      "x": 390,
+      "expect": "RED"
+    }
+  ],
+  "extras": {
+    "loose": 2
   }
- ],
- "extras": {
-  "loose": 2
- }
 }

@@ -192,7 +192,10 @@ So:
    the step that was wrong for the longest. Clipped pixels are still skipped, the
    padding stops halfway to the nearest neighbour, and pixels labelled as a *different*
    blob are ignored, so two adjacent LEDs cannot bleed into each other.
-9. **Name it** with exactly the same code the live reticle uses — one implementation of
+9. **Ask how much of the neighbourhood is the same colour** — see below. A blob whose
+   own hue fills more than 3% of the ring around it is part of a larger coloured thing,
+   not an indicator, and is dropped.
+10. **Name it** with exactly the same code the live reticle uses — one implementation of
    the bands, the simplified buckets and the hedging, so the two modes can never
    disagree. A fringe whose hue vectors cancel out — agreement below 0.50 — is not
    named at all: that is a grey fringe pointing every direction at once, and naming it
@@ -246,6 +249,46 @@ own light is strongest — and it was tried and rejected. A pinned channel drags
 towards whichever channel is second, which is towards 60° from both the red side and
 the green side; it cost three LEDs on the synthetic hue sweep and bought nothing the
 brightness cut had not already won.
+
+### Chromatic uniqueness, or: what a person is actually doing
+
+Shown a photograph of the router, a person picks out the LEDs instantly and ignores the
+wood grain, the cable and the blue rubber bulb — and the obvious explanation, that they
+*recognise* the objects, is wrong, or at least beside the point. Nothing about knowing
+what a ukulele is helps decide whether a bright speck is lit or emitting.
+
+What they are using is **local colour context**:
+
+> An LED is a point of colour with nothing else like it nearby. A lit object never is.
+
+A speck of wood grain sits in a field of more wood the same colour. A yellow cable is
+one bright point on a long yellow curve. A blue rubber bulb is surrounded by more blue
+rubber. An LED is surrounded by its own mounting, and by the dark.
+
+So for each blob: take a ring around it, and count what fraction of it is within 12° of
+the blob's measured hue. Over all eight real captures — 93 verified LEDs and the 24
+false positives that survived every earlier rule:
+
+| | fraction of the ring sharing the hue |
+|---|---|
+| 93 real LEDs | 0.00% – 1.73%, 95th percentile **0.60%** |
+| 24 false positives | **4.95%** – 35.4%, median 8.9% |
+
+Nothing lands in between, and the cut at 3% sits 1.7× above the worst LED and 1.65×
+below the first thing it kills. It removed 20 of the 24, leaving seven across the whole
+corpus. **No model is needed for this, and one would be the wrong tool**: it is twenty
+lines of arithmetic, no weights, no training data, no network, and it runs in a few
+milliseconds on the phone.
+
+Two details decide whether it works at all:
+
+- **The ring, not the disc.** A bright LED throws a halo of its own colour onto
+  whatever it is mounted on; counting that halo is counting the LED twice. Excluding
+  everything within three blob-radii took the red LED of `0006-red-in-the-dark` from
+  4.7% down to 1.7% and roughly doubled the usable margin.
+- **The blob's *measured* hue, not its centre pixel's.** A clipped LED's centre pixel is
+  white, so it matches nothing and every blob scores zero — a bug that makes the test
+  look like it is working perfectly.
 
 ### Why the captured frame is shown whole
 
@@ -374,9 +417,12 @@ like an algorithm bug.
 - A scene with no greys in it gets no illuminant estimate, so a strong cast over a
   wholly coloured subject stays uncorrected. Saying nothing beats guessing.
 - A brightly lit *saturated* object — a yellow cable catching the sun — clips coloured
-  and is, by the emitter rule, indistinguishable from a large yellow LED. One such
-  region on `corpus/0001-cbn-router` gets a ring. It shows in the test output as an
-  extra rather than being tuned away, because no local measurement separates the two.
+  and is, by the emitter rule alone, indistinguishable from a large yellow LED. This is
+  what chromatic uniqueness was built for, and the cables on `0001-cbn-router` and
+  `0008-router-on-wood` are now dropped. What survives it is the case the rule cannot
+  see: a *small, isolated* coloured object, such as the single blue point on
+  `corpus/0007-monitor-standby`, which is as chromatically unique as a real LED. Only
+  the torch can refuse that one, by asking whether it emits.
 - **Exposure control is a dead end on this phone, and that is now measured** rather
   than assumed — see above. The dark-room fix came from the illuminant and from where
   the hue is read, both proven on `corpus/0002-dark-switch` and `0003-dark-router`.

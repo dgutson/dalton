@@ -40,6 +40,7 @@ print(JSON.stringify({
   leds: out.kept.map(b=>{ const m=b.meas, src=m.pick.src; return {
           cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area,
           label:b.res.label, hue:b.res.hue===null?null:+b.res.hue.toFixed(1),
+          kin:b.kin===undefined?null:+b.kin.toFixed(4),
           sure:b.res.sure, lowIso:!!b.lowIso, washed:m.pick.washed,
           sat: src?+src.sat.toFixed(3):null, conc: src?+src.conc.toFixed(3):null,
           nUse:m.a.nUse, nGray:m.a.nGray, nClip:m.a.nClip, nDark:m.a.nDark, nPix:m.a.n}; })

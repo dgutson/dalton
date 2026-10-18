@@ -608,7 +608,7 @@ function detectBlobs(data, W, H, tier){
 
   // Shape sanity, and a score to rank by: how colourful, and how bright.
   const maxArea = W*H*MAX_FRAC;
-  const drop = {small:0, big:0, shape:0, over:0, white:0, texture:0};
+  const drop = {small:0, big:0, shape:0, over:0, white:0, texture:0, common:0};
   const blobs = [];
   for(const b of raw){
     const bw = b.x1-b.x0+1, bh = b.y1-b.y0+1;
@@ -655,6 +655,64 @@ function detectBlobs(data, W, H, tier){
 }
 
 const MAX_LEDS = 24;
+
+/* ---------- chromatic uniqueness ----------
+   The question that separates an indicator from a lit object, asked in one line:
+
+       how much of my neighbourhood is the same colour as me?
+
+   An LED is a point of colour with nothing else like it nearby. A lit object never
+   is — a speck of wood grain sits in a field of more wood the same colour, a yellow
+   cable is one bright point on a long yellow curve, a blue rubber bulb is surrounded
+   by more blue rubber. Measured over all eight real captures, 93 verified LEDs and
+   24 false positives:
+
+       real LEDs      0.00% - 1.73%        (p95 0.60%)
+       false positives 4.95% - 35.4%       (median 8.9%)
+
+   Nothing in between. This is the strongest single signal in the project, and it is
+   twenty lines of arithmetic — no model, no training data, no network.             */
+const KIN_R    = 0.111;  // window radius as a fraction of the frame's short side
+const KIN_TOL  = 12;     // degrees; two hues this close are one colour to the eye
+const KIN_VMIN = 60;     // hue is noise below this, same floor the detector uses
+const KIN_SMIN = 0.25;   // and grey pixels are not evidence about colour either
+const KIN_MAX  = 0.03;   // 1.7x above the worst real LED, 1.65x below the first kill
+
+function kinFrac(data, W, H, b, hue, g){
+  const R = Math.max(24, Math.round(Math.min(W,H)*KIN_R));
+  // Skip the blob AND its own glow. A bright LED throws a halo of its own colour
+  // onto whatever it is mounted on; that halo is the LED, counted twice, not
+  // evidence of anything. Leaving it in cost most of the margin: the red LED in the
+  // dark of 0006 scored 4.7% with the halo and 1.7% without it.
+  const inner = Math.max(3*b.rad, 12);
+  const R2 = R*R, in2 = inner*inner;
+  const cx = Math.round(b.cx), cy = Math.round(b.cy);
+  const y0 = Math.max(0, cy-R), y1 = Math.min(H-1, cy+R);
+  const x0 = Math.max(0, cx-R), x1 = Math.min(W-1, cx+R);
+  let n = 0, kin = 0;
+  for(let y=y0; y<=y1; y++){
+    const dy2 = (y-cy)*(y-cy), row = y*W;
+    for(let x=x0; x<=x1; x++){
+      const dx = x-cx, d2 = dx*dx + dy2;
+      if(d2 > R2 || d2 <= in2) continue;
+      n++;                                 // the denominator is the whole annulus,
+      const i = (row+x) << 2;              // so an empty dark room scores zero
+      const R0=data[i], G=data[i+1], B0=data[i+2];
+      if((R0>G ? (R0>B0?R0:B0) : (G>B0?G:B0)) < KIN_VMIN) continue;
+      const r = R0*g.r, bl = B0*g.b;
+      const mx = r>G ? (r>bl?r:bl) : (G>bl?G:bl);
+      const mn = r<G ? (r<bl?r:bl) : (G<bl?G:bl);
+      const d = mx - mn;
+      if(mx <= 0 || d/mx < KIN_SMIN) continue;
+      let hh;
+      if(mx===r)      hh = 60*((G-bl)/d);
+      else if(mx===G) hh = 60*((bl-r)/d + 2);
+      else            hh = 60*((r-G)/d + 4);
+      if(cycAbs(norm(hh), hue) <= KIN_TOL) kin++;
+    }
+  }
+  return n ? kin/n : 0;
+}
 
 function measureBlobs(frames, det, W, H){
   const {labels, val, blobs, drop} = det;
@@ -721,9 +779,20 @@ function measureBlobs(frames, det, W, H){
       const pick = pickSource(t.a, t.b);
       const score = pick.src ? pick.src.nUse * pick.src.conc * (pick.washed?0.4:1) : -1;
       if(!best || score > best.score)
-        best = {score, a:t.a, b2:t.b, pick, ev:f.ev, wb:gains[fi]};
+        best = {score, a:t.a, b2:t.b, pick, ev:f.ev, wb:gains[fi], data:f.data};
     }
     b.meas = best;
+
+    // Asked on the same pixels the colour was read from, against the hue actually
+    // measured there. Using the centre pixel's hue instead is wrong and looks
+    // right: on a clipped LED that pixel is white, so it matches nothing and every
+    // blob scores zero.
+    const src = best && best.pick.src;
+    if(src){
+      const hue = norm(Math.atan2(src.vy, src.vx)*180/Math.PI);
+      b.kin = kinFrac(best.data, W, H, b, hue, best.wb);
+      if(b.kin > KIN_MAX){ drop.common++; continue; }
+    }
     kept.push(b);
   }
 
@@ -1453,6 +1522,7 @@ function footText(){
   if(d.shape) p.push(d.shape+' wrong shape');
   if(d.white) p.push(d.white+' white, not an emitter');
   if(d.texture) p.push(d.texture+' lit texture, not a light');
+  if(d.common) p.push(d.common+' the same colour as its surroundings');
   if(d.over)  p.push(d.over+' weaker than the '+MAX_LEDS+' shown');
   return p.length ? 'ignored: ' + p.join(', ') : '';
 }
@@ -1479,6 +1549,7 @@ function framePayload(){
       return { n:i+1, cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area, pad:b.pad,
                peak:b.peak, satc:+b.satc.toFixed(3), score:Math.round(b.score),
              surround:Math.round(b.surround), lowIso:!!b.lowIso,
+             kin: b.kin===undefined ? null : +b.kin.toFixed(4),
                label:b.res.label, note:b.res.note, ev:m.ev,
                hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
                sat: src ? +(src.sat).toFixed(3) : null,

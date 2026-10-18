@@ -1,19 +1,19 @@
 {
- "w": 720,
- "h": 1280,
- "verified": true,
- "note": "A monitor in standby in a dark room (roomLevel 0). ONE LED, and it settles a disagreement: Daniel reported this as a red LED, and it is amber. The app reads hue 42, and the magnified crop shows a plainly golden-orange glow with a white-hot centre. The evidence that this is the light and not a bias in the pipeline is that frames 0006 and 0008 were taken the same night in the same darkness and their red LEDs came back at hue 1.2 and 1.3; the same code returns red when the light is red. Amber is the conventional standby colour, and distinguishing it from red is exactly what this app exists to do. THE NEGATIVES ARE REAL FAILURES, not ambiguities: a white highlight on a headset (435,586) named OTHER, and two reflections off a teal plastic disc under the monitor (697,286) and (693,290) at hue 197 and 199, which land one and three degrees inside the green band and are therefore named GREEN. Naming a teal reflection GREEN is the worst kind of error this app can make, since green is a word Daniel acts on. Both teal blobs are flagged lowIso. EXTRAS: a white highlight on the headset and two reflections off the teal disc under the monitor, the latter named GREEN at hue 197-199. These are the worst remaining errors in the corpus because green is a word Daniel acts on. Ratchet at today's count; the torch test is the way to remove them, not a tuned threshold.",
- "source": "frames/0010, captured 2026-10-18, roomLevel 0, torch off",
- "leds": [
-  {
-   "y": 659,
-   "x": 370,
-   "expect": "YELLOW"
+  "w": 720,
+  "h": 1280,
+  "verified": true,
+  "note": "A monitor in standby in a dark room (roomLevel 0). ONE LED, and it settles a disagreement: Daniel reported this as a red LED, and it is amber. The app reads hue 42, and the magnified crop shows a plainly golden-orange glow with a white-hot centre. The evidence that this is the light and not a bias in the pipeline is that frames 0006 and 0008 were taken the same night in the same darkness and their red LEDs came back at hue 1.2 and 1.3; the same code returns red when the light is red. Amber is the conventional standby colour, and distinguishing it from red is exactly what this app exists to do. THE NEGATIVES ARE REAL FAILURES, not ambiguities: a white highlight on a headset (435,586) named OTHER, and two reflections off a teal plastic disc under the monitor (697,286) and (693,290) at hue 197 and 199, which land one and three degrees inside the green band and are therefore named GREEN. Naming a teal reflection GREEN is the worst kind of error this app can make, since green is a word Daniel acts on. Both teal blobs are flagged lowIso. EXTRAS: a white highlight on the headset and two reflections off the teal disc under the monitor, the latter named GREEN at hue 197-199. These are the worst remaining errors in the corpus because green is a word Daniel acts on. Ratchet at today's count; the torch test is the way to remove them, not a tuned threshold.",
+  "source": "frames/0010, captured 2026-10-18, roomLevel 0, torch off",
+  "leds": [
+    {
+      "y": 659,
+      "x": 370,
+      "expect": "YELLOW"
+    }
+  ],
+  "extras": {
+    "strict": 1,
+    "normal": 1,
+    "loose": 1
   }
- ],
- "extras": {
-  "strict": 1,
-  "normal": 3,
-  "loose": 3
- }
 }
