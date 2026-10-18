@@ -841,6 +841,18 @@ async function bracket(){
     }
   }catch(e){ exlog.note = 'failed: ' + (e.name||e); }
 
+  // A blinking activity LED can be dark at the instant the shutter opens, and a
+  // shorter exposure makes that more likely — the one thing going darker makes
+  // worse. Take repeats at the final setting and keep them all; detection uses
+  // whichever caught the most.
+  if(series.length > 1){
+    const last = series[series.length-1];
+    for(let k=0;k<2;k++){
+      await settle(120);
+      series.push({ev:last.ev, mode:last.mode, repeat:k+1, data:grabFrame().data});
+    }
+  }
+
   // Always hand the camera back the way it was found.
   try{
     if(canManual){
@@ -894,13 +906,21 @@ async function scan(){
   try{
     frames = await bracket();
     tBracket = performance.now() - t0;
-    // Darkest first. The darkest exposure that still finds a light is the one
-    // where reflections have fallen away and only emitters are left.
+    // Darkest exposure first: that is where reflections have fallen away and only
+    // emitters are left. Among repeats at the same exposure take the best one, so a
+    // blink that happened to be dark in one shot does not lose the LED.
     const tries = [];
+    const byEv = new Map();
     for(let i=frames.length-1;i>=0;i--){
       const d = detectBlobs(frames[i].data, vw, vh, sens);
-      tries.push({i, ev:frames[i].ev, n:d.blobs.length, peak:d.peak, T:d.T});
-      if(!det && d.blobs.length) det = d;
+      tries.push({i, ev:frames[i].ev, rep:frames[i].repeat||0, n:d.blobs.length,
+                  peak:d.peak, T:d.T});
+      const prev = byEv.get(frames[i].ev);
+      if(!prev || d.blobs.length > prev.d.blobs.length) byEv.set(frames[i].ev, {i, d});
+    }
+    for(const ev of [...byEv.keys()].sort((a,b)=>a-b)){     // most negative first
+      const c = byEv.get(ev);
+      if(c.d.blobs.length){ det = c.d; det.usedEv = ev; det.usedFrame = c.i; break; }
     }
     if(!det) det = detectBlobs(frames[0].data, vw, vh, sens);
     det.tries = tries;
@@ -914,7 +934,7 @@ async function scan(){
 
   shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, minSat:det.minSat,
            peak:det.peak, nCol:det.nCol, nRaw:det.nRaw, evs:frames.map(f=>f.ev),
-           tries:det.tries, exlog,
+           tries:det.tries, usedEv:det.usedEv, usedFrame:det.usedFrame, exlog,
            frames,                               // kept for the debug upload
            // how long it actually took on real hardware, which no amount of
            // benchmarking on a laptop will tell you
@@ -1055,6 +1075,7 @@ function framePayload(){
     nCol:shot.nCol, evs:shot.evs,
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
     ms:shot.ms, msBracket:shot.msBracket, tries:shot.tries, exposure:shot.exlog,
+    usedEv:shot.usedEv, usedFrame:shot.usedFrame,
     caps:{ exposure: !!(caps && caps.exposureCompensation),
            wb: !!(caps && caps.whiteBalanceMode) },
     leds: shot.leds.map((b,i)=>{
