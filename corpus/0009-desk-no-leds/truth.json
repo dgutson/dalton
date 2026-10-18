@@ -1,0 +1,13 @@
+{
+  "w": 720,
+  "h": 1280,
+  "verified": true,
+  "leds": [],
+  "extras": {
+    "strict": 4,
+    "normal": 4,
+    "loose": 3
+  },
+  "source": "frames/0013, captured 2026-10-18, camera probe, rear camera, torch unavailable",
+  "note": "A lit desk with NO LEDs on it at all: a laptop, a VR headset, bookshelves, a printed mat, a glass bottle. The right answer is nothing, and the app says four. They are printed colour and highlights - the red hat and lettering of a 'Warrior Nerd' sticker on the laptop lid (241,526) (278,521) (297,512) and the amber edge of a glass bottle on an orange mat (682,477). Chromatic uniqueness cannot touch these: a small red print IS chromatically unique, which is the honest limit of that rule. THIS ENTRY CARRIES A SECOND PLANE. frame-dark.rgba.gz is the same scene at an eighth of the exposure, from the same probe, and it is here so the headroom test can be built and proved offline. The probe already measured the reflector half of that test on exactly these blobs: every one kept 0.73x to 1.93x of what the whole scene kept, with clipping at 0%. A clipped LED should keep several times the scene. The emitter half is still unproven - this frame has no emitter in it - so a probe pointed at a router is what unblocks it. Budget is today's count: four, four, three. It only goes down."
+}

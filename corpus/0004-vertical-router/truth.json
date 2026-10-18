@@ -2,7 +2,7 @@
   "w": 720,
   "h": 1280,
   "verified": true,
-  "note": "A tall black cylindrical router on a wooden shelf in a lit room, seven green LEDs in a vertical column down its front. All seven are found and named GREEN at every tier. This entry is in the corpus for its NEGATIVES, which are the clearest example yet of the one ambiguity the emitter rule cannot resolve: a yellow ethernet cable crossing the ukulele behind the router (552,284) and a blue rubber blower bulb on the right (578,500, hue 208, named OTHER). Both are reflectors, both are brightly lit, both are saturated, and both therefore clip COLOURED exactly as an emitter does. Nothing local separates them from a large coloured LED, so they are expected extras rather than a known_limit - extras are printed but do not fail the run. EXTRAS: the yellow ethernet cable crossing the ukulele and the blue rubber blower bulb, plus smaller lit highlights at loose. All reflectors, all saturated, all clipping coloured exactly as an emitter does. Budget is a ratchet at today's count.",
+  "note": "A tall black cylindrical router on a wooden shelf in a lit room, seven green LEDs in a vertical column down its front. All seven are found and named GREEN at every tier. This entry is in the corpus for its NEGATIVES, which are the clearest example yet of the one ambiguity the emitter rule cannot resolve: a yellow ethernet cable crossing the ukulele behind the router (552,284) and a blue rubber blower bulb on the right (578,500, hue 208, named OTHER). Both are reflectors, both are brightly lit, both are saturated, and both therefore clip COLOURED exactly as an emitter does. Nothing local separates them from a large coloured LED, so they are expected extras rather than a known_limit - extras are printed but do not fail the run. EXTRAS: the yellow ethernet cable crossing the ukulele and the blue rubber blower bulb, plus smaller lit highlights at loose. All reflectors, all saturated, all clipping coloured exactly as an emitter does. Budget is a ratchet at today's count. SINCE: 'nothing local separates them' turned out to be false. Chromatic uniqueness separates them easily - the blue bulb scores 23-35% and the yellow cable 3.6-4.1%, against 0.19-0.49% for all seven LEDs - because a large coloured object is surrounded by more of itself and an LED is not. All extras gone at every tier; budget removed.",
   "source": "frames/0005, captured 2026-10-18, lit room (roomLevel 114), torch off",
   "leds": [
     {
@@ -40,8 +40,5 @@
       "x": 340,
       "expect": "GREEN"
     }
-  ],
-  "extras": {
-    "loose": 1
-  }
+  ]
 }

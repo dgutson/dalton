@@ -79,25 +79,50 @@ def steps_table(meta):
 
 
 def emitter_test(meta, stem, tier='normal'):
-    """Compare every blob between the torch-off and torch-on frames."""
+    """Which blobs kept their light when the exposure was cut?
+
+    Planes exist only for steps that APPLIED, so they are indexed by meta['evs'] and
+    never by position in meta['steps'] - a step that failed leaves no frame behind and
+    shifts everything after it. Getting that wrong once compared the auto frame against
+    itself and reported a clean 1.0 for every blob, which looks exactly like a working
+    test returning a boring answer.
+    """
     names = meta.get('planes', [])
-    idx = {s['name']: i for i, s in enumerate(meta['steps'])}
-    if 'torch-on' not in idx or idx['torch-on'] >= len(names):
-        print('\nEMITTER TEST: skipped, no torch-on frame in this probe.')
+    evs = meta.get('evs') or [s['name'] for s in meta['steps'] if s.get('applied')]
+    idx = {name: i for i, name in enumerate(evs) if i < len(names)}
+    stats = {s['name']: s.get('stats') for s in meta['steps']}
+    if 'auto' not in idx:
+        print('\nEMITTER TEST: skipped, no auto frame.')
         return
+
+    if 'torch-on' in idx:
+        other, kind = 'torch-on', 'torch'
+    else:
+        # No torch on this phone. Cutting the exposure is the lever that is left, and
+        # it tests the same thing from the other side. Both an emitter and a reflector
+        # scale linearly with exposure, so on its own a cut separates nothing - EXCEPT
+        # that a clipped pixel is lying about how bright it was. An LED pinned at 255
+        # may really be worth thousands; the room at 129 is worth 129. Cut the light to
+        # an eighth and the room collapses while the LED is merely no longer clipped.
+        # So the ratio measures hidden headroom, which is what "is it emitting" means.
+        dark = [(st['mean'], n) for n, st in stats.items()
+                if st and n in idx and n != 'auto' and st['med'] > 2]
+        if not dark:
+            print('\nEMITTER TEST: skipped, no usable second exposure in this probe.')
+            return
+        other, kind = min(dark)[1], 'exposure'
     import numpy as np
     W, H = meta['w'], meta['h']
 
-    def frame(i):
-        p = os.path.join(ROOT, 'frames', names[i] + '.rgba')
+    def frame(name):
+        p = os.path.join(ROOT, 'frames', names[idx[name]] + '.rgba')
         return np.fromfile(p, dtype=np.uint8).reshape(H, W, 4)[:, :, :3].astype(float)
 
-    off = frame(idx.get('auto', 0))
-    on = frame(idx['torch-on'])
+    a_img, b_img = frame('auto'), frame(other)
+    scene = (stats[other]['mean'] / stats['auto']['mean']) if stats['auto']['mean'] else 1
 
-    # Blobs come from the REAL detector, on the torch-off frame.
     r = subprocess.run(['qjs', '--std', os.path.join(HERE, 'detect_test.js'),
-                        os.path.join(ROOT, 'frames', names[idx.get('auto', 0)] + '.rgba'),
+                        os.path.join(ROOT, 'frames', names[idx['auto']] + '.rgba'),
                         str(W), str(H), tier, 'simple'],
                        capture_output=True, text=True, cwd=ROOT)
     if r.returncode:
@@ -105,29 +130,43 @@ def emitter_test(meta, stem, tier='normal'):
         return
     leds = json.loads(r.stdout)['leds']
     if not leds:
-        print('\nEMITTER TEST: nothing detected in the torch-off frame.')
+        print('\nEMITTER TEST: nothing detected in the auto frame.')
         return
 
-    def patch(img, cy, cx, r=4):
-        return img[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1].max(2)
+    def patch(img, cy, cx, rad=4):
+        return img[max(0, cy-rad):cy+rad+1, max(0, cx-rad):cx+rad+1].max(2)
 
     rows = []
     for b in leds:
-        a = patch(off, b['cy'], b['cx']).mean()
-        c = patch(on, b['cy'], b['cx']).mean()
-        rows.append((c / max(a, 1e-6), a, c, b))
-    rows.sort(key=lambda t: t[0])
+        p0, p1 = patch(a_img, b['cy'], b['cx']), patch(b_img, b['cy'], b['cx'])
+        rows.append((p1.mean() / max(p0.mean(), 1e-6), p0.mean(), p1.mean(),
+                     (p0 >= 250).mean(), b))
+    rows.sort(key=lambda t: -t[0])
 
-    print('\nEMITTER TEST  (torch off -> on; low ratio = emitter, high = reflector)')
-    print('  ratio   off    on     where            named')
-    for ratio, a, c, b in rows:
-        print('  %-7.2f %-6.0f %-6.0f (%4d,%4d)      %s'
-              % (ratio, a, c, b['cy'], b['cx'], b['label']))
-    lo, hi = rows[0][0], rows[-1][0]
-    print('\n  spread %.2f to %.2f (%.1fx).' % (lo, hi, hi / max(lo, 1e-6)), end=' ')
-    print('A clean split means the emitter test works here.' if hi / max(lo, 1e-6) > 2
-          else 'No clean split - the torch may be too weak, or everything in frame '
-               'is the same kind of thing.')
+    if kind == 'torch':
+        print('\nEMITTER TEST  auto -> torch-on   (low = emitter, high = reflector)')
+    else:
+        print('\nEMITTER TEST  auto -> %s   the whole scene kept %.3f of its light.'
+              % (other, scene))
+        print('  A blob that kept much MORE than that was clipped, i.e. far brighter '
+              'than it\n  could say - which is what an emitter looks like.')
+    print('\n  kept   x scene  auto   dark   clip%%  where          named')
+    for ratio, p0, p1, cl, b in rows:
+        print('  %-6.3f %-8.2f %-6.0f %-6.0f %-6.0f (%4d,%4d)    %s'
+              % (ratio, ratio / max(scene, 1e-6), p0, p1, cl * 100,
+                 b['cx'], b['cy'], b['label']))
+    hi = rows[0][0] / max(scene, 1e-6)
+    lo = rows[-1][0] / max(scene, 1e-6)
+    # What counts as a split. "x scene" estimates how many times over the clip point
+    # the blob really was, so a reflector sits at 1 by construction and local contrast
+    # alone spreads a scene of pure reflectors over about 2x. An LED that clips is
+    # worth several times the clip point and lands far above that, with clip% at 100
+    # in the auto frame. Anything under 3x is a scene with nothing emitting in it.
+    print('\n  top blob is %.1fx the scene.' % hi, end=' ')
+    print('That is an emitter; the test works here.' if hi > 3
+          else 'Under 3x, with clip%% at 0 - nothing in this frame was emitting, '
+               'so\n  the test is unproven rather than failed. Re-probe pointing at '
+               'a router.')
 
 
 def main():

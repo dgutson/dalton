@@ -195,7 +195,14 @@ So:
 9. **Ask how much of the neighbourhood is the same colour** — see below. A blob whose
    own hue fills more than 3% of the ring around it is part of a larger coloured thing,
    not an indicator, and is dropped.
-10. **Name it** with exactly the same code the live reticle uses — one implementation of
+10. **Drop anything that cannot be named.** "Too small or too dim to read" is worth
+    saying in the live reticle, where the user is pointing at one thing deliberately.
+    Among twenty found blobs it is a speck with a leader line that says nothing. White
+    LEDs are *named* white by the same fallback, so nothing real is lost.
+11. **Merge a light counted twice** — see below. A bright LED can break into its
+    clipped core plus a fragment of its own halo, and on one capture produced three
+    labels.
+12. **Name it** with exactly the same code the live reticle uses — one implementation of
    the bands, the simplified buckets and the hedging, so the two modes can never
    disagree. A fringe whose hue vectors cancel out — agreement below 0.50 — is not
    named at all: that is a grey fringe pointing every direction at once, and naming it
@@ -275,10 +282,17 @@ false positives that survived every earlier rule:
 | 24 false positives | **4.95%** – 35.4%, median 8.9% |
 
 Nothing lands in between, and the cut at 3% sits 1.7× above the worst LED and 1.65×
-below the first thing it kills. It removed 20 of the 24, leaving seven across the whole
-corpus. **No model is needed for this, and one would be the wrong tool**: it is twenty
-lines of arithmetic, no weights, no training data, no network, and it runs in a few
-milliseconds on the phone.
+below the first thing it kills. Together with the two rules that followed it — dropping
+blobs the namer cannot read, and merging a light counted twice — **every one of those
+eight captures now scores a clean sweep with zero false positives at all three
+sensitivities**, and the per-capture extras budgets have all been removed, so a single
+new false positive anywhere fails the suite. **No model is needed for this, and one
+would be the wrong tool**: it is twenty lines of arithmetic, no weights, no training
+data, no network, and it runs in a few milliseconds on the phone.
+
+Its honest limit is the opposite case, and `corpus/0009-desk-no-leds` is in the suite
+to hold it: a *small* patch of printed colour — the red lettering on a laptop sticker —
+is as chromatically unique as an LED, and this rule has nothing to say about it.
 
 Two details decide whether it works at all:
 
@@ -289,6 +303,26 @@ Two details decide whether it works at all:
 - **The blob's *measured* hue, not its centre pixel's.** A clipped LED's centre pixel is
   white, so it matches nothing and every blob scores zero — a bug that makes the test
   look like it is working perfectly.
+
+### One light, or two?
+
+A bright LED does not always come out as one component. On `corpus/0006-red-in-the-dark`
+a single red LED produced three: the clipped core, a fragment of its halo 7px away, and
+another 31px away. Three labels, one light.
+
+Distance cannot fix this. The genuine LEDs on the router panels are 29 to 45px apart,
+so a rule that merged at 31px would merge real neighbours. What separates the two
+situations is whether there is a **dark gap**: two LEDs on a panel have the unlit
+plastic between them, and a blob and a piece of its own glow do not. Walk the line
+between the two centres, take the darkest point on it as a fraction of the dimmer end:
+
+| | darkest point between them |
+|---|---|
+| 21 pairs of genuine LEDs | 0.04 – 0.23 |
+| 3 pairs that are one LED twice | 0.32, 0.32, 0.87 |
+
+The cut is at 0.28, the hues have to agree to within 15° as well, and the larger blob
+always survives so it is the fragment that goes and never the core.
 
 ### Why the captured frame is shown whole
 
@@ -369,29 +403,53 @@ nothing. Two causes, both now fixed:
   now halves rather than quarters, measures the frame it actually got after each step,
   climbs back once if it overshoots, and stops as soon as there is nothing left to see.
 
+The probe has since measured all of this directly on the phone this app is used on, a
+Galaxy Fold 5, rear camera:
+
+| asked for | what the pixels did |
+|---|---|
+| `iso` 3200 → 400 | nothing. Also meaningless: auto was *already* at the floor of 50 |
+| `iso` → 50 | nothing, for the same reason |
+| `exposureTime` → half | median 129 → 9, **0.12x**, not the 0.5x requested |
+| `exposureCompensation` → −2 EV | median 129 → 9, **0.12x**, not the 0.25x requested |
+
+So the sharper statement is not that exposure is a fiction — it is that **the lever
+moves, and the scale it moves on is not the one printed on it**. Both requests
+overshot, in the same direction, by four to eight times. ISO is inert. Measuring the
+frame after each step, which the ladder now does, is the whole defence.
+
 Before anything else is built on a camera parameter, *Settings -> Probe what this
 camera can do* walks every lever the camera claims to have, one at a time, and saves
 both the numbers and the frames. `python3 tools/probe.py frames/NNNN` reads it back
 and gives a verdict per lever — read off the pixels, never off `getSettings()`, which
 has now been wrong twice. It is cheap insurance against a third time.
 
-**The torch is the lever that works.** It is also the one suggested to you: in live
-mode, when the room is dark *and* something in the circle is clipping — the exact
-conditions under which colour degrades, not merely a dark room — a banner offers to
-switch the flash on. Lighting the room reaches the same place from the other side, by
-making the camera's own auto exposure stop down, and it does not depend on a phone
-honouring a constraint in the way the constraint meant.
+**The torch would be the best lever, and this phone does not offer it.** An LED emits
+the same light whether the torch is on or off; a reflector does not, so a
+torch-off/torch-on *pair* separates emitter from reflector by construction. The camera
+re-exposes between the two shots by an unknown factor, which rules out comparing
+absolute values but not directions: with the torch on an emitter goes *dimmer* (`E/k`)
+while a lit object goes *brighter* (`(A+T)/k`). `tools/probe.py` still runs that test
+on any probe that captured the pair.
 
-It can do more than that. An LED emits the same light whether the torch is on or off;
-a reflector does not. So a torch-off/torch-on **pair** separates emitter from
-reflector by construction — the one ambiguity that no single frame can resolve, and
-the source of the false positives on `corpus/0004-vertical-router`. The camera
-re-exposes between the two shots by some unknown factor, which rules out comparing
-absolute values, but not directions: with the torch on an emitter goes *dimmer*
-(`E/k`) while a lit object goes *brighter* (`(A+T)/k`), so ranking blobs by that ratio
-works without knowing the factor. `tools/probe.py` runs exactly that test on any probe
-that captured the pair. There is a manual toggle under
-*Settings -> Camera* as well, and whether it was on is recorded with every capture.
+On the Fold 5's rear camera — which has a flash, three inches from the lens —
+`getCapabilities()` simply does not list `torch`, and `applyConstraints` is refused.
+That is a browser limitation, not a missing component, and it is worth one try in
+another Chromium build before the idea is abandoned. The live-mode banner that offers
+to switch the flash on is still there and still correct; it is gated on the torch
+actually existing, so on this phone it never appears.
+
+**What is left is the exposure cut, which tests the same thing from the other side.**
+Both an emitter and a reflector scale linearly with exposure, so on its own a cut
+separates nothing — *except* that a clipped pixel is lying about how bright it was. An
+LED pinned at 255 may really be worth several thousand; the wall behind it at 129 is
+worth 129. Cut the light to an eighth and the wall collapses to 15 while the LED is
+merely no longer clipped. The ratio therefore measures **hidden headroom**, and
+"brighter than the sensor could say" is very close to what "emitting" means. The probe
+prints that ratio as a multiple of what the whole scene kept, so a reflector reads 1
+by construction and an LED should read several. This has not yet been confirmed on a
+frame that actually contains an LED — the first probe was pointed at a desk — so it is
+written down here as the plan, not as a result.
 
 At the darkest usable setting it takes two more shots. A quickly blinking LED is simply
 absent from some frames, which is how one of three green LEDs was being lost; among
@@ -496,9 +554,20 @@ stops tomorrow's fix from breaking it.
   cable that is strongly coloured but never clips, so none of it is detected.
 - `0007-monitor-standby` — a monitor in standby, and the entry that settled an argument:
   reported as red, measured amber at hue 42, while two red LEDs shot the same night in
-  the same darkness came back at 1.2 and 1.3. Its negatives are genuine errors — two
-  reflections off a teal disc at hue 197 and 199, three degrees inside the green band
-  and therefore named GREEN.
+  the same darkness came back at 1.2 and 1.3. It also settled one the other way: a blue
+  point recorded here as "a white highlight" and counted against the app is a second
+  LED, on a headset stand. Its real negatives — two teal reflections at hue 197 and 199,
+  three degrees inside the green band and therefore named GREEN, the worst error in the
+  corpus — are now dropped.
+- `0008-router-on-wood` — the seven-LED router framed against wood panelling. **The
+  capture that caught the worst regression so far**: fourteen labels, seven of them
+  specks of wood grain, while the suite said OK because extras were printed and not
+  counted.
+- `0009-desk-no-leds` — a lit desk with **no LEDs on it at all**, so the right answer is
+  nothing and anything found is a false positive. The app still finds four: printed
+  colour on a laptop sticker and the amber edge of a glass bottle. It carries a second
+  plane, the same scene at an eighth of the exposure, so the headroom test can be built
+  against it offline.
 
 To add one:
 

@@ -1,0 +1,228 @@
+{
+ "w": 720,
+ "h": 1280,
+ "evs": [
+  "auto",
+  "iso-mid-400",
+  "iso-min-50",
+  "exptime-half",
+  "ev-min"
+ ],
+ "kind": "camera-probe",
+ "caps": {
+  "aspectRatio": {
+   "max": 4000,
+   "min": 0.0003333333333333333
+  },
+  "colorTemperature": {
+   "max": 7000,
+   "min": 2850,
+   "step": 50
+  },
+  "deviceId": "6b7c5e249daf37167b9cd630c693647c63c5c7b10513ffccd88eebd9645d0a82",
+  "exposureCompensation": {
+   "max": 2,
+   "min": -2,
+   "step": 0.10000000149011612
+  },
+  "exposureMode": [
+   "continuous",
+   "manual"
+  ],
+  "exposureTime": {
+   "max": 6746.07955,
+   "min": 0.10667,
+   "step": 0.1
+  },
+  "facingMode": [
+   "environment"
+  ],
+  "focusDistance": {
+   "max": 0.614366888999939,
+   "min": 0,
+   "step": 0.009999999776482582
+  },
+  "focusMode": [
+   "manual"
+  ],
+  "frameRate": {
+   "max": 30,
+   "min": 0
+  },
+  "groupId": "a561389a8bcca050db10daf7c130f9399d2a529eef038af4c1162014e2071968",
+  "height": {
+   "max": 3000,
+   "min": 1
+  },
+  "iso": {
+   "max": 3200,
+   "min": 50,
+   "step": 1
+  },
+  "resizeMode": [
+   "none",
+   "crop-and-scale"
+  ],
+  "whiteBalanceMode": [
+   "continuous",
+   "manual"
+  ],
+  "width": {
+   "max": 4000,
+   "min": 1
+  },
+  "zoom": {
+   "max": 8,
+   "min": 1,
+   "step": 0.1
+  }
+ },
+ "settings0": {
+  "exposureMode": "continuous",
+  "exposureTime": 299.94234,
+  "exposureCompensation": 0,
+  "iso": 50,
+  "whiteBalanceMode": "continuous",
+  "colorTemperature": 0
+ },
+ "steps": [
+  {
+   "name": "auto",
+   "want": null,
+   "applied": true,
+   "err": null,
+   "got": {
+    "exposureMode": "continuous",
+    "exposureTime": 299.94234,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   "stats": {
+    "med": 129,
+    "mean": 97.2,
+    "clip": 0.0089,
+    "r": 113,
+    "g": 93,
+    "b": 85
+   }
+  },
+  {
+   "name": "torch-on",
+   "want": {
+    "torch": true
+   },
+   "applied": false,
+   "err": "not in getCapabilities()",
+   "got": {},
+   "stats": null
+  },
+  {
+   "name": "iso-mid-400",
+   "want": {
+    "iso": 400
+   },
+   "applied": true,
+   "err": null,
+   "got": {
+    "exposureMode": "continuous",
+    "exposureTime": 299.94234,
+    "exposureCompensation": 0,
+    "iso": 400,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   "stats": {
+    "med": 129,
+    "mean": 97.1,
+    "clip": 0.009,
+    "r": 113,
+    "g": 93,
+    "b": 85
+   }
+  },
+  {
+   "name": "iso-min-50",
+   "want": {
+    "iso": 50
+   },
+   "applied": true,
+   "err": null,
+   "got": {
+    "exposureMode": "continuous",
+    "exposureTime": 299.94234,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   "stats": {
+    "med": 128,
+    "mean": 97,
+    "clip": 0.0087,
+    "r": 113,
+    "g": 93,
+    "b": 85
+   }
+  },
+  {
+   "name": "exptime-half",
+   "want": {
+    "exposureMode": "manual",
+    "exposureTime": 149.97117
+   },
+   "applied": true,
+   "err": null,
+   "got": {
+    "exposureMode": "none",
+    "exposureTime": 149.97117,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   "stats": {
+    "med": 9,
+    "mean": 11.3,
+    "clip": 0,
+    "r": 13,
+    "g": 11,
+    "b": 11
+   }
+  },
+  {
+   "name": "ev-min",
+   "want": {
+    "exposureCompensation": -2
+   },
+   "applied": true,
+   "err": null,
+   "got": {
+    "exposureMode": "none",
+    "exposureTime": 149.97117,
+    "exposureCompensation": -2,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   "stats": {
+    "med": 9,
+    "mean": 11.6,
+    "clip": 0,
+    "r": 14,
+    "g": 11,
+    "b": 10
+   }
+  }
+ ],
+ "stem": "0013",
+ "bytes": 18432000,
+ "planes": [
+  "0013",
+  "0013-e1",
+  "0013-e2",
+  "0013-e3",
+  "0013-e4"
+ ]
+}

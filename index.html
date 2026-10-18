@@ -460,13 +460,16 @@ function scanFallback(a, b){
   if(f.nUse >= f.minUse && f.sat < 0.09)    return white('Bright with no hue — a white LED');
   if(a.nClip/bright > 0.60)
     return bad('TOO BRIGHT','Core still blown out at the lowest exposure — move back');
-  return bad('NO CLEAR COLOUR','Too small or too dim to read — move closer');
+  return bad('NO CLEAR COLOUR','Too small or too dim to read — move closer', true);
 }
 function white(note){
   return { label: simple ? 'OTHER' : 'WHITE', note, cls:'', band:-1, sure:false,
            swatch: simple ? SIMPLE_CSS.OTHER : '#f2f2f2' };
 }
-function bad(label, note){ return {label, note, cls:'bad', swatch:'#000', band:-1, sure:false}; }
+function bad(label, note, unreadable){
+  return {label, note, cls:'bad', swatch:'#000', band:-1, sure:false,
+          unreadable: !!unreadable};
+}
 
 // Collapse to RED / YELLOW / GREEN / OTHER. With only four answers each cut carries
 // more weight, so a hue sitting on one is reported as both rather than rounded off.
@@ -608,7 +611,8 @@ function detectBlobs(data, W, H, tier){
 
   // Shape sanity, and a score to rank by: how colourful, and how bright.
   const maxArea = W*H*MAX_FRAC;
-  const drop = {small:0, big:0, shape:0, over:0, white:0, texture:0, common:0};
+  const drop = {small:0, big:0, shape:0, over:0, white:0, texture:0, common:0,
+                unreadable:0, twice:0};
   const blobs = [];
   for(const b of raw){
     const bw = b.x1-b.x0+1, bh = b.y1-b.y0+1;
@@ -677,6 +681,38 @@ const KIN_TOL  = 12;     // degrees; two hues this close are one colour to the e
 const KIN_VMIN = 60;     // hue is noise below this, same floor the detector uses
 const KIN_SMIN = 0.25;   // and grey pixels are not evidence about colour either
 const KIN_MAX  = 0.03;   // 1.7x above the worst real LED, 1.65x below the first kill
+
+/* ---------- one light, or two? ----------
+   A bright LED can break into several components: the clipped core, and a fragment
+   of its own halo a few pixels off that happens to clear the threshold separately.
+   On corpus/0006-red-in-the-dark one red LED produced three labels, at 7px and 31px
+   from the core — and 31px is also the spacing of genuine LEDs on the router panels,
+   so distance alone cannot tell the two situations apart and would merge real LEDs.
+
+   What separates them is whether there is a DARK GAP. Two LEDs on a panel have the
+   unlit plastic between them; a blob and a piece of its own glow do not. Walking the
+   line between the two centres and taking the darkest point on it, as a fraction of
+   the dimmer end, over every pair within 70px in the corpus:
+
+       21 pairs of genuine LEDs    0.04 - 0.23
+        3 pairs, one LED twice     0.32, 0.32, 0.87
+
+   Requiring the hues to agree as well is free: both duplicate pairs differ by 0, and
+   it costs nothing because a real pair can also agree.                              */
+const SADDLE = 0.28, SAME_HUE = 15, NEAR_PX = 70;
+
+function ridge(val, W, H, a, b){
+  const steps = Math.max(2, Math.round(Math.hypot(b.cx-a.cx, b.cy-a.cy)));
+  const at = t => {
+    const x = Math.min(W-1, Math.max(0, Math.round(a.cx + (b.cx-a.cx)*t)));
+    const y = Math.min(H-1, Math.max(0, Math.round(a.cy + (b.cy-a.cy)*t)));
+    return val[y*W + x];
+  };
+  let lo = 255;
+  for(let i=1; i<steps; i++) lo = Math.min(lo, at(i/steps));
+  const ends = Math.min(at(0), at(1));
+  return ends > 0 ? lo/ends : 0;
+}
 
 function kinFrac(data, W, H, b, hue, g){
   const R = Math.max(24, Math.round(Math.min(W,H)*KIN_R));
@@ -809,7 +845,33 @@ function measureBlobs(frames, det, W, H){
       b.res.sure = false;
     }
   });
-  return {kept, drop, gains};
+
+  // A blob the namer gave up on is not an answer. In the live reticle "too small or
+  // too dim to read" is worth saying — the user is pointing at one thing and wants
+  // to know why there is no name for it. Among twenty automatically found blobs it
+  // is only clutter: a one-pixel speck with a leader line and a box, saying nothing.
+  // Nothing real is lost. A white LED is NAMED white by the same fallback rather
+  // than refused, and a core still blown out at the lowest exposure keeps its TOO
+  // BRIGHT label, because both of those tell the user something.
+  const readable = kept.filter(b => {
+    if(!b.res.unreadable) return true;
+    drop.unreadable++; return false;
+  });
+
+  // Largest first, so the fragment is dropped and the core is kept, never the other
+  // way round. See SADDLE.
+  const solid = new Set();
+  for(const b of readable.slice().sort((p,q)=>q.area - p.area)){
+    let twice = false;
+    for(const o of solid){
+      if(Math.hypot(o.cx-b.cx, o.cy-b.cy) > NEAR_PX) continue;
+      if(b.res.hue === null || o.res.hue === null) continue;
+      if(cycAbs(b.res.hue, o.res.hue) > SAME_HUE) continue;
+      if(ridge(val, W, H, o, b) > SADDLE){ twice = true; break; }
+    }
+    if(twice) drop.twice++; else solid.add(b);
+  }
+  return {kept: readable.filter(b => solid.has(b)), drop, gains};
 }
 
 function nameBlob(b){
@@ -1523,6 +1585,8 @@ function footText(){
   if(d.white) p.push(d.white+' white, not an emitter');
   if(d.texture) p.push(d.texture+' lit texture, not a light');
   if(d.common) p.push(d.common+' the same colour as its surroundings');
+  if(d.unreadable) p.push(d.unreadable+' too small or dim to read');
+  if(d.twice) p.push(d.twice+' the same light counted twice');
   if(d.over)  p.push(d.over+' weaker than the '+MAX_LEDS+' shown');
   return p.length ? 'ignored: ' + p.join(', ') : '';
 }

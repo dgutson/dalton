@@ -2,7 +2,7 @@
   "w": 720,
   "h": 1280,
   "verified": true,
-  "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED. Strict used to lose the third LED down \u2014 its core is 2 pixels at strict's threshold of 247 \u2014 which is why strict's minimum area is 2 and not 3. All three sensitivities must now find all seven. EXTRAS: a brightly lit region of yellow cable and wood at the bottom right that clips coloured. The budget is a ratchet set at today's count, not an endorsement; it should go to zero once a torch-off/torch-on pair can tell an emitter from a reflector outright.",
+  "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED. Strict used to lose the third LED down \u2014 its core is 2 pixels at strict's threshold of 247 \u2014 which is why strict's minimum area is 2 and not 3. All three sensitivities must now find all seven. EXTRAS: a brightly lit region of yellow cable and wood at the bottom right that clips coloured. The budget is a ratchet set at today's count, not an endorsement; it should go to zero once a torch-off/torch-on pair can tell an emitter from a reflector outright. SINCE: the extras are gone and the budget with them. Chromatic uniqueness did it, not the torch - the lit cable-and-wood region has 11% of its surroundings sharing its hue against 0.2-0.9% for the seven LEDs.",
   "source": "frames/0001, captured 2026-10-18",
   "leds": [
     {
@@ -40,8 +40,5 @@
       "x": 364,
       "expect": "GREEN"
     }
-  ],
-  "extras": {
-    "loose": 2
-  }
+  ]
 }
