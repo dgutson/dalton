@@ -1,0 +1,29 @@
+{
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "known_limit": {
+  "strict": "open defect, not a tier trade-off: see note. Strict finds nothing at all here.",
+  "normal": "open defect, not a tier trade-off: see note.",
+  "loose": "open defect, not a tier trade-off: see note."
+ },
+ "note": "Five-port switch on a white wall in a dark corner, photographed with the camera's own auto exposure. Three green link LEDs in a diagonal row on the front edge, partly behind white ethernet cables; they blink quickly, so a single frame may miss one. An orange cable crosses above them and is the interesting negative - it is a reflector, and at loose it gets a ring. THIS ENTRY IS A STANDING FAILURE, recorded deliberately. The long exposure destroyed the colour before any code saw it: the LED cores come back [245,255,213], [234,255,196] and [236,255,223], saturation around 0.2, and even the unclipped fringe reads hue 75 to 94 with agreement over 0.99 - confidently yellow. The same kind of LED in a lit room (0001) reads 150 to 163. Nothing downstream can recover this; subtracting the ambient does nothing, the ambient is [7,6,6]. It closes when a capture of this switch taken with the exposure driven down reads green, and then this entry is replaced by that one. Detection itself is fine at loose: 3/3 found.",
+ "source": "frames/0002, captured 2026-10-18, single plane - predates saving the whole exposure series",
+ "leds": [
+  {
+   "y": 590,
+   "x": 375,
+   "expect": "GREEN"
+  },
+  {
+   "y": 611,
+   "x": 394,
+   "expect": "GREEN"
+  },
+  {
+   "y": 632,
+   "x": 414,
+   "expect": "GREEN"
+  }
+ ]
+}

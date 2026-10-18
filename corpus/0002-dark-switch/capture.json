@@ -1,0 +1,66 @@
+{
+ "w": 720,
+ "h": 1280,
+ "T": 243,
+ "minSat": 0.3,
+ "peak": 255,
+ "nCol": 88916,
+ "evs": [
+  0,
+  -1,
+  -2
+ ],
+ "sens": "med",
+ "simple": true,
+ "bounds": [
+  345,
+  18,
+  40,
+  68,
+  88,
+  175,
+  200,
+  250,
+  288
+ ],
+ "drop": {
+  "small": 0,
+  "big": 0,
+  "shape": 1,
+  "over": 0
+ },
+ "nRaw": 2,
+ "ms": 1120,
+ "msBracket": 1074,
+ "caps": {
+  "exposure": true,
+  "wb": true
+ },
+ "leds": [
+  {
+   "n": 1,
+   "cx": 393,
+   "cy": 611,
+   "area": 4,
+   "pad": 3,
+   "peak": 255,
+   "satc": 0.281,
+   "score": 72,
+   "surround": 141,
+   "lowIso": false,
+   "label": "YELLOW",
+   "note": "confident",
+   "ev": -1,
+   "hue": 46.8,
+   "sat": 0.352,
+   "conc": 0.937,
+   "nUse": 71,
+   "nClip": 0,
+   "nGray": 0,
+   "nDark": 1,
+   "nPix": 72
+  }
+ ],
+ "bytes": 3686400,
+ "stem": "0002"
+}
