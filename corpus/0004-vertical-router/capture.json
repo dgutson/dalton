@@ -1,0 +1,439 @@
+{
+ "w": 720,
+ "h": 1280,
+ "T": 243,
+ "minSat": 0.3,
+ "peak": 255,
+ "nCol": 223106,
+ "evs": [
+  0,
+  -1,
+  -2,
+  -2,
+  -2
+ ],
+ "wb": [
+  {
+   "r": 1.029,
+   "b": 1.045,
+   "n": 42204
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 1
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 2
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 1
+  }
+ ],
+ "sens": "med",
+ "simple": true,
+ "bounds": [
+  345,
+  18,
+  40,
+  68,
+  88,
+  175,
+  200,
+  250,
+  288
+ ],
+ "drop": {
+  "small": 3,
+  "big": 0,
+  "shape": 4,
+  "over": 0,
+  "white": 12
+ },
+ "nRaw": 28,
+ "torch": false,
+ "roomLevel": 114,
+ "ms": 1432,
+ "msBracket": 1262,
+ "tries": [
+  {
+   "i": 4,
+   "ev": -2,
+   "rep": 2,
+   "n": 0,
+   "peak": 124,
+   "T": 200
+  },
+  {
+   "i": 3,
+   "ev": -2,
+   "rep": 1,
+   "n": 0,
+   "peak": 122,
+   "T": 200
+  },
+  {
+   "i": 2,
+   "ev": -2,
+   "rep": 0,
+   "n": 0,
+   "peak": 119,
+   "T": 200
+  },
+  {
+   "i": 1,
+   "ev": -1,
+   "rep": 0,
+   "n": 0,
+   "peak": 106,
+   "T": 200
+  },
+  {
+   "i": 0,
+   "ev": 0,
+   "rep": 0,
+   "n": 9,
+   "peak": 255,
+   "T": 243
+  }
+ ],
+ "exposure": {
+  "mode": "manual",
+  "caps": {
+   "exposureMode": [
+    "continuous",
+    "manual"
+   ],
+   "exposureTime": {
+    "max": 6746.07955,
+    "min": 0.10667,
+    "step": 0.1
+   },
+   "exposureCompensation": {
+    "max": 2,
+    "min": -2,
+    "step": 0.10000000149011612
+   },
+   "iso": {
+    "max": 3200,
+    "min": 50,
+    "step": 1
+   },
+   "whiteBalanceMode": [
+    "continuous",
+    "manual"
+   ]
+  },
+  "settings": [
+   {
+    "step": "start",
+    "ev": 0,
+    "exposureMode": "continuous",
+    "exposureTime": 299.94234,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual1",
+    "want": 149.97117,
+    "median": 3,
+    "exposureMode": "none",
+    "exposureTime": 149.97117,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual2",
+    "want": 212.09126257896105,
+    "median": 4,
+    "exposureMode": "none",
+    "exposureTime": 212.09126,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   }
+  ],
+  "note": "exposure request overshot \u2014 2 frame(s) came back black \u00b7 every darkened frame was black \u2014 exposure control is not usable here, try the flash",
+  "medians": [
+   114,
+   3,
+   4,
+   4,
+   4
+  ]
+ },
+ "usedEv": 0,
+ "usedFrame": 0,
+ "caps": {
+  "exposure": true,
+  "wb": true
+ },
+ "leds": [
+  {
+   "n": 1,
+   "cx": 344,
+   "cy": 491,
+   "area": 16,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 86,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 160.6,
+   "sat": 0.638,
+   "conc": 0.994,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 92,
+   "nClip": 15,
+   "nGray": 2,
+   "nDark": 1,
+   "nPix": 110
+  },
+  {
+   "n": 2,
+   "cx": 345,
+   "cy": 446,
+   "area": 13,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 104,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 163.7,
+   "sat": 0.755,
+   "conc": 0.995,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 84,
+   "nClip": 12,
+   "nGray": 4,
+   "nDark": 0,
+   "nPix": 100
+  },
+  {
+   "n": 3,
+   "cx": 284,
+   "cy": 552,
+   "area": 9,
+   "pad": 3,
+   "peak": 250,
+   "satc": 0.676,
+   "score": 169,
+   "surround": 146,
+   "lowIso": false,
+   "label": "YELLOW",
+   "note": "confident",
+   "ev": 0,
+   "hue": 49.2,
+   "sat": 0.571,
+   "conc": 0.999,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 91,
+   "nClip": 3,
+   "nGray": 1,
+   "nDark": 4,
+   "nPix": 99
+  },
+  {
+   "n": 4,
+   "cx": 342,
+   "cy": 576,
+   "area": 15,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 88,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 162.8,
+   "sat": 0.697,
+   "conc": 0.998,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 77,
+   "nClip": 15,
+   "nGray": 1,
+   "nDark": 7,
+   "nPix": 100
+  },
+  {
+   "n": 5,
+   "cx": 343,
+   "cy": 534,
+   "area": 12,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 94,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 166.3,
+   "sat": 0.717,
+   "conc": 0.992,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 89,
+   "nClip": 11,
+   "nGray": 0,
+   "nDark": 0,
+   "nPix": 100
+  },
+  {
+   "n": 6,
+   "cx": 500,
+   "cy": 578,
+   "area": 73,
+   "pad": 4,
+   "peak": 254,
+   "satc": 0.741,
+   "score": 188,
+   "surround": 136,
+   "lowIso": false,
+   "label": "OTHER",
+   "note": "confident",
+   "ev": 0,
+   "hue": 208.4,
+   "sat": 0.57,
+   "conc": 0.999,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 307,
+   "nClip": 32,
+   "nGray": 102,
+   "nDark": 1,
+   "nPix": 442
+  },
+  {
+   "n": 7,
+   "cx": 341,
+   "cy": 657,
+   "area": 15,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 76,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 159.8,
+   "sat": 0.781,
+   "conc": 0.994,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 75,
+   "nClip": 13,
+   "nGray": 0,
+   "nDark": 12,
+   "nPix": 100
+  },
+  {
+   "n": 8,
+   "cx": 341,
+   "cy": 617,
+   "area": 15,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 77,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 158.8,
+   "sat": 0.673,
+   "conc": 0.99,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 77,
+   "nClip": 13,
+   "nGray": 6,
+   "nDark": 14,
+   "nPix": 110
+  },
+  {
+   "n": 9,
+   "cx": 340,
+   "cy": 695,
+   "area": 13,
+   "pad": 3,
+   "peak": 255,
+   "satc": 1,
+   "score": 255,
+   "surround": 73,
+   "lowIso": false,
+   "label": "GREEN",
+   "note": "confident",
+   "ev": 0,
+   "hue": 159,
+   "sat": 0.7,
+   "conc": 0.987,
+   "wb": {
+    "r": 1.029,
+    "b": 1.045
+   },
+   "nUse": 73,
+   "nClip": 10,
+   "nGray": 2,
+   "nDark": 15,
+   "nPix": 100
+  }
+ ],
+ "stem": "0005",
+ "bytes": 18432000,
+ "planes": [
+  "0005",
+  "0005-e1",
+  "0005-e2",
+  "0005-e3",
+  "0005-e4"
+ ]
+}

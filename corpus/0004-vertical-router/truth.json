@@ -1,0 +1,44 @@
+{
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "note": "A tall black cylindrical router on a wooden shelf in a lit room, seven green LEDs in a vertical column down its front. All seven are found and named GREEN at every tier. This entry is in the corpus for its NEGATIVES, which are the clearest example yet of the one ambiguity the emitter rule cannot resolve: a yellow ethernet cable crossing the ukulele behind the router (552,284) and a blue rubber blower bulb on the right (578,500, hue 208, named OTHER). Both are reflectors, both are brightly lit, both are saturated, and both therefore clip COLOURED exactly as an emitter does. Nothing local separates them from a large coloured LED, so they are expected extras rather than a known_limit - extras are printed but do not fail the run.",
+ "source": "frames/0005, captured 2026-10-18, lit room (roomLevel 114), torch off",
+ "leds": [
+  {
+   "y": 446,
+   "x": 345,
+   "expect": "GREEN"
+  },
+  {
+   "y": 491,
+   "x": 344,
+   "expect": "GREEN"
+  },
+  {
+   "y": 534,
+   "x": 343,
+   "expect": "GREEN"
+  },
+  {
+   "y": 576,
+   "x": 342,
+   "expect": "GREEN"
+  },
+  {
+   "y": 617,
+   "x": 341,
+   "expect": "GREEN"
+  },
+  {
+   "y": 657,
+   "x": 341,
+   "expect": "GREEN"
+  },
+  {
+   "y": 695,
+   "x": 340,
+   "expect": "GREEN"
+  }
+ ]
+}

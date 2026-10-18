@@ -1253,7 +1253,11 @@ function drawOverlay(){
   const placed=[];
   shot.leds.forEach((b,i)=>{
     const X = m.dx + b.cx*m.s, Y = m.dy + b.cy*m.s;
-    const R = Math.max(13, (b.rad + b.pad)*m.s);
+    // How far the label is held off the light. This used to be the radius of a ring
+    // drawn around each blob; with the ring gone it is only a gap, so it can be much
+    // tighter — which also keeps each label near its own light instead of drifting
+    // across the panel towards somebody else's.
+    const R = Math.max(8, Math.min(b.rad*m.s + 4, 18));
     // The hue is shown only on a name that is not confident — that is the one case
     // where the number is worth reading, and the one to report for calibration.
     const txt = b.res.label + (!b.res.sure && b.res.hue !== null
@@ -1277,15 +1281,21 @@ function drawOverlay(){
       }
     }
 
-    g.strokeStyle='rgba(0,0,0,.85)'; g.lineWidth=3.5;
+    // A dot, not a ring. Seven LEDs in a column meant seven rings at least 26px
+    // across in 5px-wide stroke, and with the leader lines and the labels on top of
+    // that the picture stopped being readable — which defeats the point of showing
+    // the picture at all. A dot marks the same spot for a fraction of the ink, and
+    // scales a little with the blob so a big light still looks like a big light.
+    const dot = Math.max(2.5, Math.min(b.rad*m.s, 6));
+    g.strokeStyle='rgba(0,0,0,.8)'; g.lineWidth=2.5;
     g.beginPath(); g.moveTo(X,Y); g.lineTo(box.x+pw/2, box.y+ph/2); g.stroke();
-    g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=1.2;
+    g.strokeStyle='rgba(255,255,255,.9)'; g.lineWidth=1;
     g.beginPath(); g.moveTo(X,Y); g.lineTo(box.x+pw/2, box.y+ph/2); g.stroke();
 
-    g.lineWidth = 5; g.strokeStyle='#000';
-    g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
-    g.lineWidth = 2.2; g.strokeStyle='#fff';
-    g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
+    g.beginPath(); g.arc(X,Y,dot+1.6,0,6.2832);
+    g.fillStyle='rgba(0,0,0,.8)'; g.fill();
+    g.beginPath(); g.arc(X,Y,dot,0,6.2832);
+    g.fillStyle='#fff'; g.fill();
 
     g.fillStyle = 'rgba(8,10,13,.92)';
     rrect(g, box.x, box.y, pw, ph, 7); g.fill();

@@ -1,0 +1,250 @@
+{
+ "w": 720,
+ "h": 1280,
+ "T": 243,
+ "minSat": 0.3,
+ "peak": 255,
+ "nCol": 495,
+ "evs": [
+  0,
+  -1,
+  -2,
+  -2,
+  -2
+ ],
+ "wb": [
+  {
+   "r": 1.028,
+   "b": 0.99,
+   "n": 62809
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  },
+  {
+   "r": 1,
+   "b": 1,
+   "n": 0
+  }
+ ],
+ "sens": "med",
+ "simple": true,
+ "bounds": [
+  345,
+  18,
+  40,
+  68,
+  88,
+  175,
+  200,
+  250,
+  288
+ ],
+ "drop": {
+  "small": 0,
+  "big": 0,
+  "shape": 0,
+  "over": 0,
+  "white": 0
+ },
+ "nRaw": 2,
+ "torch": false,
+ "roomLevel": 1,
+ "ms": 1467,
+ "msBracket": 1304,
+ "tries": [
+  {
+   "i": 4,
+   "ev": -2,
+   "rep": 2,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  },
+  {
+   "i": 3,
+   "ev": -2,
+   "rep": 1,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  },
+  {
+   "i": 2,
+   "ev": -2,
+   "rep": 0,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  },
+  {
+   "i": 1,
+   "ev": -1,
+   "rep": 0,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  },
+  {
+   "i": 0,
+   "ev": 0,
+   "rep": 0,
+   "n": 2,
+   "peak": 255,
+   "T": 243
+  }
+ ],
+ "exposure": {
+  "mode": "manual",
+  "caps": {
+   "exposureMode": [
+    "continuous",
+    "manual"
+   ],
+   "exposureTime": {
+    "max": 6746.07955,
+    "min": 0.10667,
+    "step": 0.1
+   },
+   "exposureCompensation": {
+    "max": 2,
+    "min": -2,
+    "step": 0.10000000149011612
+   },
+   "iso": {
+    "max": 3200,
+    "min": 50,
+    "step": 1
+   },
+   "whiteBalanceMode": [
+    "continuous",
+    "manual"
+   ]
+  },
+  "settings": [
+   {
+    "step": "start",
+    "ev": 0,
+    "exposureMode": "continuous",
+    "exposureTime": 212.09126,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual1",
+    "want": 106.04563,
+    "median": 1,
+    "exposureMode": "none",
+    "exposureTime": 106.04563,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   },
+   {
+    "step": "manual2",
+    "want": 149.97116817639917,
+    "median": 3,
+    "exposureMode": "none",
+    "exposureTime": 149.97116,
+    "exposureCompensation": 0,
+    "iso": 50,
+    "whiteBalanceMode": "continuous",
+    "colorTemperature": 0
+   }
+  ],
+  "note": "exposure request overshot \u2014 2 frame(s) came back black \u00b7 every darkened frame was black \u2014 exposure control is not usable here, try the flash",
+  "medians": [
+   110,
+   1,
+   3,
+   3,
+   3
+  ]
+ },
+ "usedEv": -2,
+ "usedFrame": 4,
+ "caps": {
+  "exposure": true,
+  "wb": true
+ },
+ "leds": [
+  {
+   "n": 1,
+   "cx": 246,
+   "cy": 638,
+   "area": 116,
+   "pad": 5,
+   "peak": 255,
+   "satc": 0.987,
+   "score": 252,
+   "surround": 74,
+   "lowIso": false,
+   "label": "RED",
+   "note": "confident",
+   "ev": 0,
+   "hue": 1.2,
+   "sat": 0.294,
+   "conc": 0.988,
+   "wb": {
+    "r": 1.028,
+    "b": 0.99
+   },
+   "nUse": 243,
+   "nClip": 171,
+   "nGray": 92,
+   "nDark": 0,
+   "nPix": 506
+  },
+  {
+   "n": 2,
+   "cx": 420,
+   "cy": 629,
+   "area": 106,
+   "pad": 5,
+   "peak": 255,
+   "satc": 0.935,
+   "score": 238,
+   "surround": 47,
+   "lowIso": false,
+   "label": "YELLOW",
+   "note": "confident",
+   "ev": -2,
+   "hue": 30,
+   "sat": 0.894,
+   "conc": 0.999,
+   "wb": {
+    "r": 1,
+    "b": 1
+   },
+   "nUse": 151,
+   "nClip": 76,
+   "nGray": 0,
+   "nDark": 257,
+   "nPix": 484
+  }
+ ],
+ "stem": "0006",
+ "bytes": 18432000,
+ "planes": [
+  "0006",
+  "0006-e1",
+  "0006-e2",
+  "0006-e3",
+  "0006-e4"
+ ]
+}

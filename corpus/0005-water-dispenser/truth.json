@@ -1,0 +1,19 @@
+{
+ "w": 720,
+ "h": 1280,
+ "verified": true,
+ "note": "An Everfull water dispenser, white plastic, in a dark kitchen (roomLevel 1). Two indicators are lit and one is not. THE FIRST NON-GREEN ENTRY IN THE CORPUS, which is why it matters: every earlier capture was green LEDs, so nothing tested whether a red or an amber indicator survives the pipeline. The left indicator over the hot water icon is red and reads hue 1.2; the middle one over the power icon is amber and reads hue 30, named YELLOW - which is the right answer in this app's vocabulary, where amber is not a word that helps. The right-hand indicator over the snowflake is OFF and is correctly not detected. Both lit cores are blown to near white - the brightest pixels are [255,233,199] and [255,253,168] - so this is also the proof that a blown RED core still comes back red, because the hue is read from the unclipped shoulder and clipped pixels are dropped.",
+ "source": "frames/0006, captured 2026-10-18, dark room (roomLevel 1), torch off",
+ "leds": [
+  {
+   "y": 638,
+   "x": 246,
+   "expect": "RED"
+  },
+  {
+   "y": 629,
+   "x": 420,
+   "expect": "YELLOW"
+  }
+ ]
+}

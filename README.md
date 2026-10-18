@@ -402,9 +402,14 @@ found, so a miss or a false positive is visible at a glance.
 
 ## Tests
 
-    pkg install quickjs-ng python-numpy
-    ./tools/check.sh      # real captures first, then synthetic scenes
+    pkg install quickjs-ng python-numpy git-lfs
+    ./tools/check.sh      # real captures first, then synthetic scenes (~30s)
     ./tools/lint.sh       # static checks on index.html; run after every edit to it
+    qjs --std tools/label_test.js    # label placement: off-screen and overlaps
+
+The captures in `corpus/` are stored with **git LFS**, so a clone without it gets
+130-byte pointer files and `check.sh` fails in a thoroughly confusing way. If that
+happens: `pkg install git-lfs && git lfs install && git lfs pull`.
 
 `check.sh` runs two suites, and the order they print in is the point.
 
@@ -415,10 +420,23 @@ stops tomorrow's fix from breaking it.
 
 - `0001-cbn-router` — the seven-LED router that broke the first two detectors. 7/7 at
   every sensitivity, no exceptions.
-- `0002-dark-switch` — the same three green LEDs in a dark corner that broke the colour
-  reading. Still carries a `known_limit` for *strict*, which finds two of the three.
+- `0002-dark-switch` — three green LEDs in a dark corner, the capture that broke the
+  colour reading. Still carries a `known_limit` for *strict*, which finds two of three.
 - `0003-dark-router` — that switch re-shot, and the capture that proved the exposure
   ladder was blacking the frame out. 3/3 at every sensitivity.
+- `0004-vertical-router` — seven green LEDs in a column, in a lit room. Here for its
+  negatives: a yellow cable and a blue rubber bulb, both lit, saturated, and clipping
+  coloured exactly as an emitter does.
+- `0005-water-dispenser` — **the first non-green entry.** A red indicator and an amber
+  one, both with cores blown to near white, in a dark kitchen; proof that a blown red
+  core still comes back red. A third indicator is off and correctly not found.
+- `0006-red-in-the-dark` — one red LED in near-total darkness, against a coil of orange
+  cable that is strongly coloured but never clips, so none of it is detected.
+- `0007-monitor-standby` — a monitor in standby, and the entry that settled an argument:
+  reported as red, measured amber at hue 42, while two red LEDs shot the same night in
+  the same darkness came back at 1.2 and 1.3. Its negatives are genuine errors — two
+  reflections off a teal disc at hue 197 and 199, three degrees inside the green band
+  and therefore named GREEN.
 
 To add one:
 
