@@ -1,0 +1,16 @@
+{
+  "w": 720,
+  "h": 1280,
+  "verified": true,
+  "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED.",
+  "source": "frames/0001, captured 2026-10-18",
+  "leds": [
+    {"y": 547, "x": 369, "expect": "GREEN"},
+    {"y": 578, "x": 368, "expect": "GREEN"},
+    {"y": 608, "x": 368, "expect": "GREEN"},
+    {"y": 637, "x": 367, "expect": "GREEN"},
+    {"y": 667, "x": 366, "expect": "GREEN"},
+    {"y": 696, "x": 365, "expect": "GREEN"},
+    {"y": 727, "x": 364, "expect": "GREEN"}
+  ]
+}

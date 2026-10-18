@@ -123,10 +123,11 @@
     <button class="sbtn" data-sens="med">normal</button>
     <button class="sbtn" data-sens="high">loose</button>
   </div>
-  <p class="hint">How far above its own surroundings a thing must be to count as a light.
-     Strict finds only the obvious ones; loose also picks up dim or distant ones — and more
-     false alarms, which is the safer way round. A dim LED next to a blazing one is found
-     either way: brightness is judged locally, not against the brightest point in the shot.</p>
+  <p class="hint">How colourful a bright spot must be to count as an indicator. An LED emits
+     its own narrow band of colour, so it clips <em>coloured</em>; a reflection of a lamp or a
+     window clips <em>white</em>. Strict demands a strong colour and misses the faintest LEDs;
+     loose accepts weaker ones and picks up more reflections with them. Normal was measured
+     best on a real router panel.</p>
   <div class="row">
     <div class="lab">Bracket exposure</div>
     <button class="sbtn" id="brBtn">on</button>
@@ -178,18 +179,30 @@ function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} 
 const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
 const ABBR   = ['R','A','Y','L','G','C','B','V','M'];
 const SWATCH = ['#ff2b1f','#ff8c00','#ffe000','#b4ff00','#00e05a','#00e5e5','#2b6bff','#9b4dff','#ff3fa4'];
-// Band edges in degrees. The red/amber cut sits at 18 rather than 12 for the same
-// asymmetry: a red fault light photographs anywhere up to about 15 degrees, and
-// calling a fault a warning is the expensive direction.
-const DEF_BOUNDS = [345,18,40,68,88,160,200,250,288];     // band i spans bounds[i] -> bounds[i+1]
+// Band edges in degrees, calibrated against real captures rather than the colour
+// wheel. Two edges are deliberately off-textbook:
+//
+//   red/amber at 18, not 12 — a red fault light photographs anywhere up to about
+//     15 degrees, and calling a fault a warning is the expensive direction.
+//   green/cyan at 175, not 160 — the green indicators on a real router panel measured
+//     150 to 163 degrees. Their green channel clips at 255 while blue keeps climbing,
+//     and a warm room pushes the white balance the same way, so a green LED
+//     photographs green-cyan. Two of seven were being called OTHER.
+const DEF_BOUNDS = [345,18,40,68,88,175,200,250,288];     // band i spans bounds[i] -> bounds[i+1]
 // Simplified mode: one bucket per band. null = the yellow-green zone, which is
 // genuinely ambiguous on this hardware and is reported as unsure rather than guessed.
 //              RED     AMBER     YELLOW   LIME   GREEN    CYAN     BLUE     VIOLET   MAGENTA
-// Simplified names, one per band. Lime (68-88 deg) is deliberately YELLOW, not GREEN:
-// it is where the old yellow-green indicators land, and the two mistakes are not
-// equally bad. A yellow LED called GREEN is a warning that never gets looked at. A
-// green LED called YELLOW costs a second glance. Err towards the second one.
-const SIMPLE = ['RED', 'YELLOW', 'YELLOW', 'YELLOW', 'GREEN', 'OTHER', 'OTHER', 'OTHER', 'OTHER'];
+// Simplified names, one per band.
+//
+// Lime (68-88 deg) is deliberately YELLOW, not GREEN: it is where the old
+// yellow-green indicators land, and the two mistakes are not equally bad. A yellow
+// LED called GREEN is a warning that never gets looked at; a green LED called YELLOW
+// costs a second glance. Err towards the second one.
+//
+// Cyan (175-200 deg) is GREEN. A true cyan indicator is vanishingly rare; a green one
+// photographing blue-shifted is not, as the real captures show. Blue indicators sit
+// at 210 and beyond and stay OTHER.
+const SIMPLE = ['RED', 'YELLOW', 'YELLOW', 'YELLOW', 'GREEN', 'GREEN', 'OTHER', 'OTHER', 'OTHER'];
 const SIMPLE_CSS = {RED:'#ff2b1f', YELLOW:'#ffe000', GREEN:'#00e05a', OTHER:'#9aa6b2'};
 const UNSURE_CSS = '#b4ff00';
 const S_ORDER = {RED:0, YELLOW:1, GREEN:2, OTHER:3};      // canonical order for "X OR Y"
@@ -365,27 +378,38 @@ function nearestBoundary(h){
    threshold on value plus connected components finds them. The colour is deliberately
    NOT read from the core — that is the clipped part and carries no hue — but from a
    padded box around each blob, where the unclipped fringe lives. */
-// Two thresholds, OR-ed together, because each one is blind to what the other sees.
+// An indicator LED is an EMITTER. Everything else in a photo of a room is a
+// REFLECTOR. The camera makes that difference visible twice over:
 //
-//   local  — how far a pixel rises above its OWN surroundings. Scale-free, so a dim
-//            activity LED on a dark bezel passes as easily as a blazing power LED.
-//            Blind to a light so large it becomes its own background.
-//   global — a fraction of the brightest pixel in the frame. Catches that large light,
-//            and nothing dimmer than the fraction. One bright LED, or a lamp anywhere
-//            in shot, sets a bar every other LED then fails to clear.
+//   it clips.          A camera auto-exposing for the room puts any LED bright enough
+//                      to read as "on" at the very top of its range.
+//   it clips COLOURED. A specular highlight reflects the room's illuminant, so it
+//                      clips white. An LED emits its own narrow band, so it clips
+//                      saturated.
 //
-// Global alone is what shipped, and on a router panel it found the top LED and lost the
-// six below it. A spare false light is cheap to ignore on screen; a missing one is not.
-const TIER  = {low:[55,0.90], med:[35,0.82], high:[25,0.68]};   // [local rise, global fraction]
-const FLOOR = 35;        // absolute: below this nothing counts as lit, however local
-const BGDIV = 30;        // background grid block = min(W,H)/BGDIV
+// Measured on a real capture — a router panel against wood, a plant, a yellow cable
+// and a painted wall — of the thirteen blobs at value 245 or over, the seven LEDs had
+// 75th-percentile saturation 0.45 to 0.83 and the six highlights had 0.07. Nothing
+// else in that frame came close to separating them: local contrast put the LEDs at
+// 141-204 while the frame's own 99th percentile was 153.
+//
+// The frame peak is taken over SATURATED pixels only, so a white window or a lamp
+// cannot raise the bar for everything else. That is what used to lose six LEDs out
+// of seven.
+//
+//                      min saturation,  min area,  how far below the saturated peak
+const TIER  = {low:[0.40,3,8], med:[0.30,2,12], high:[0.20,1,20]};
+const VFLOOR     = 60;      // saturation is meaningless noise on a dark pixel
+const MAX_FRAC   = 0.02;    // an LED is small; 2% of the frame is already enormous
+const MAX_ASPECT = 3.0;     // and roughly round, not a streak along an edge
+const MIN_FILL   = 0.45;    // and solid, not a ragged outline
 // Isolation cutoff. A blob over it is *flagged*, never dropped.
 const ISO = 0.75;
 
-// 3x3 box, separable. Costs two passes and drops the sensor noise floor about threefold,
-// which is the only thing the loose threshold was otherwise finding in a dim room.
-function blur3(src, W, H){
-  const tmp = new Float32Array(W*H), out = new Float32Array(W*H);
+// 3x3 box, separable. Two passes, and it stops single noisy pixels from faking either
+// brightness or saturation.
+function blur3(src, W, H, out){
+  const tmp = new Float32Array(W*H);
   for(let y=0;y<H;y++){
     const r=y*W;
     for(let x=0;x<W;x++)
@@ -398,97 +422,35 @@ function blur3(src, W, H){
   return out;
 }
 
-// Min or max over a (2r+1) square of grid cells, clamped at the edges.
-function winOp(a, bw, bh, r, isMin){
-  const out = new Float32Array(bw*bh);
-  for(let y=0;y<bh;y++){
-    const y0=Math.max(0,y-r), y1=Math.min(bh-1,y+r);
-    for(let x=0;x<bw;x++){
-      const x0=Math.max(0,x-r), x1=Math.min(bw-1,x+r);
-      let v = a[y*bw+x];
-      for(let ny=y0;ny<=y1;ny++) for(let nx=x0;nx<=x1;nx++){
-        const u = a[ny*bw+nx];
-        if(isMin ? u<v : u>v) v=u;
-      }
-      out[y*bw+x]=v;
-    }
-  }
-  return out;
-}
-
-// Local background: a grey opening on a coarse grid. Eroding deletes anything smaller
-// than the window — every LED — and dilating puts the level back. The dilation is
-// deliberately the wider of the two: a symmetric opening leaves a false ridge along any
-// hard bright edge (a window frame, a monitor bezel), and a ridge reads as a row of
-// lights. Wider dilation pushes the estimate up to the bright side's own level instead.
-function bgGrid(sm, W, H, B){
-  const bw = Math.ceil(W/B), bh = Math.ceil(H/B);
-  const g = new Float32Array(bw*bh).fill(1e9);
-  for(let y=0;y<H;y++){
-    const row=(y/B|0)*bw, r=y*W;
-    for(let x=0;x<W;x++){
-      const i = row + (x/B|0), v = sm[r+x];
-      if(v < g[i]) g[i] = v;
-    }
-  }
-  return {grid: winOp(winOp(g,bw,bh,1,true), bw,bh,2,false), bw, bh};
-}
-
 function detectBlobs(data, W, H, tier){
-  const N=W*H, t = TIER[tier] || TIER.med, Tloc = t[0], frac = t[1];
-  const B = Math.max(8, Math.round(Math.min(W,H)/BGDIV));
+  const N=W*H, t = TIER[tier] || TIER.med;
+  const minSat = t[0], minArea = t[1], belowPeak = t[2];
 
-  const val = new Uint8Array(N);
-  let peak = 0;
+  const val = new Uint8Array(N), sat = new Float32Array(N);
   for(let p=0;p<N;p++){
-    const i=p<<2; const R=data[i], G=data[i+1], Bc=data[i+2];
-    const mx = R>G ? (R>Bc?R:Bc) : (G>Bc?G:Bc);
-    val[p]=mx; if(mx>peak) peak=mx;
+    const i=p<<2; const R=data[i], G=data[i+1], B=data[i+2];
+    const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+    const mn = R<G ? (R<B?R:B) : (G<B?G:B);
+    val[p]=mx; sat[p] = mx>0 ? (mx-mn)/mx : 0;
   }
+  const smV = blur3(val, W, H, new Float32Array(N));
+  const smS = blur3(sat, W, H, new Float32Array(N));
 
-  const sm = blur3(val, W, H);
-  const bg = bgGrid(sm, W, H, B);
-
-  // Global half keeps the escalation ladder. On a bright background a low global
-  // threshold merges the whole wall into one region, and that region swallows the
-  // LEDs sitting on it. Escalate on a pixel count rather than a connected area —
-  // same protection, without a second flood fill per rung.
-  const maxArea = Math.round(N*0.10);
-  const ladder = [frac];
-  for(const f of [0.82, 0.90, 0.95]) if(f > frac + 1e-6) ladder.push(f);
-  let T = 0, used = frac;
-  for(const f of ladder){
-    T = Math.max(100, Math.round(peak*f)); used = f;
-    let c=0; for(let p=0;p<N;p++) if(val[p] >= T) c++;
-    if(c <= maxArea) break;
+  // Peak over coloured pixels only.
+  let peak = 0, nCol = 0;
+  for(let p=0;p<N;p++){
+    if(smS[p] < minSat || smV[p] < VFLOOR) continue;
+    nCol++; if(val[p] > peak) peak = val[p];
   }
+  const T = Math.max(120, peak - belowPeak);
 
-  // mask = local rise OR global brightness, in one bilinear pass over the background
   const mask = new Uint8Array(N);
-  for(let y=0;y<H;y++){
-    const fy = (y+0.5)/B - 0.5;
-    let gy0 = Math.floor(fy); let ty = fy - gy0;
-    if(gy0 < 0){ gy0=0; ty=0; } else if(gy0 > bg.bh-1){ gy0=bg.bh-1; ty=0; }
-    const gy1 = Math.min(gy0+1, bg.bh-1);
-    const rowA = gy0*bg.bw, rowB = gy1*bg.bw, r = y*W;
-    for(let x=0;x<W;x++){
-      const p = r+x;
-      if(val[p] >= T){ mask[p]=1; continue; }
-      const sv = sm[p];
-      if(sv < FLOOR) continue;
-      const fx = (x+0.5)/B - 0.5;
-      let gx0 = Math.floor(fx); let tx = fx - gx0;
-      if(gx0 < 0){ gx0=0; tx=0; } else if(gx0 > bg.bw-1){ gx0=bg.bw-1; tx=0; }
-      const gx1 = Math.min(gx0+1, bg.bw-1);
-      const bgv = (bg.grid[rowA+gx0]*(1-tx) + bg.grid[rowA+gx1]*tx)*(1-ty)
-                + (bg.grid[rowB+gx0]*(1-tx) + bg.grid[rowB+gx1]*tx)*ty;
-      if(sv - bgv >= Tloc) mask[p]=1;
-    }
-  }
+  for(let p=0;p<N;p++)
+    if(val[p] >= T && smS[p] >= minSat && smV[p] >= VFLOOR) mask[p]=1;
 
   const labels = new Int32Array(N);               // 0 = background
   const stack  = new Int32Array(N);               // every pixel is pushed at most once
-  const blobs = [];
+  const raw = [];
   let next = 1;
   for(let p0=0;p0<N;p0++){
     if(!mask[p0] || labels[p0]) continue;
@@ -512,25 +474,44 @@ function detectBlobs(data, W, H, tier){
         }
       }
     }
-    blobs.push({id, area, cx:sumx/area, cy:sumy/area, x0:bx0, y0:by0, x1:bx1, y1:by1, peak:bpeak});
+    raw.push({id, area, cx:sumx/area, cy:sumy/area, x0:bx0, y0:by0, x1:bx1, y1:by1, peak:bpeak});
   }
-  return {labels, val, blobs, T, Tloc, peak, frac:used};
+
+  // Shape sanity, and a score to rank by: how colourful, and how bright.
+  const maxArea = W*H*MAX_FRAC;
+  const drop = {small:0, big:0, shape:0, over:0};
+  const blobs = [];
+  for(const b of raw){
+    const bw = b.x1-b.x0+1, bh = b.y1-b.y0+1;
+    if(b.area < minArea){ drop.small++; continue; }
+    if(b.area > maxArea){ drop.big++;   continue; }
+    if(Math.max(bw,bh)/Math.min(bw,bh) > MAX_ASPECT ||
+       b.area/(bw*bh) < MIN_FILL){ drop.shape++; continue; }
+    let ssum=0, sn=0;
+    for(let y=b.y0;y<=b.y1;y++){
+      const row=y*W;
+      for(let x=b.x0;x<=b.x1;x++) if(labels[row+x]===b.id){ ssum += sat[row+x]; sn++; }
+    }
+    b.satc = sn ? ssum/sn : 0;
+    b.rad  = Math.sqrt(b.area/Math.PI);
+    b.score = b.satc * b.peak;
+    blobs.push(b);
+  }
+  blobs.sort((p,q)=>q.score-p.score);
+  return {labels, val, blobs, drop, T, peak, nCol, nRaw:raw.length, minSat};
 }
 
 const MAX_LEDS = 24;
 
 function measureBlobs(frames, det, W, H){
-  const {labels, val, blobs} = det;
-  const minArea = 6;
-  const maxArea = Math.round(W*H*0.10);
-  const drop = {small:0, big:0, over:0};
+  const {labels, val, blobs, drop} = det;
 
-  const cand = blobs.filter(b=>{
-    if(b.area < minArea){ drop.small++; return false; }
-    if(b.area > maxArea){ drop.big++;   return false; }
-    b.rad = Math.sqrt(b.area/Math.PI);
-    return true;
-  });
+  // Cap by QUALITY, not by position. The blobs arrive sorted best-first, so this
+  // keeps the most LED-like ones; reading order is applied afterwards, for display.
+  // Capping in reading order meant the top edge of the frame spent the whole budget
+  // before the detector ever reached the panel in the middle of it.
+  const cand = blobs.slice(0, MAX_LEDS);
+  drop.over = Math.max(0, blobs.length - MAX_LEDS);
 
   const kept = [];
   for(const b of cand){
@@ -579,7 +560,6 @@ function measureBlobs(frames, det, W, H){
     const rp=Math.round(p.cy/rowH), rq=Math.round(q.cy/rowH);
     return rp!==rq ? rp-rq : p.cx-q.cx;
   });
-  if(kept.length > MAX_LEDS){ drop.over = kept.length - MAX_LEDS; kept.length = MAX_LEDS; }
   kept.forEach(b=>{
     b.res = nameBlob(b);
     if(b.lowIso){
@@ -615,7 +595,7 @@ const shotc = document.createElement('canvas');                   // the picture
 let stream=null, track=null, caps={}, frozen=false;
 let simple = load('dalton.simple', false);
 let sampleFactor = load('dalton.size', 0.10);
-let sens = load('dalton.sens','high');
+let sens = load('dalton.sens2','med');   // measured best on the real capture
 let bracketOn = load('dalton.bracket', true);
 let ema=null, wakeLock=null;
 let mode='live', shot=null, busy=false;
@@ -831,8 +811,9 @@ async function scan(){
     return;
   }
 
-  shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, Tloc:det.Tloc,
-           peak:det.peak, frac:det.frac, nRaw:det.blobs.length, evs:frames.map(f=>f.ev),
+  shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, minSat:det.minSat,
+           peak:det.peak, nCol:det.nCol, nRaw:det.nRaw, evs:frames.map(f=>f.ev),
+           frames,                               // kept for the debug upload
            // how long it actually took on real hardware, which no amount of
            // benchmarking on a laptop will tell you
            ms: Math.round(performance.now() - t0), msBracket: Math.round(tBracket) };
@@ -955,8 +936,8 @@ function footText(){
   const d=shot.drop, p=[];
   if(d.small) p.push(d.small+' too small');
   if(d.big)   p.push(d.big+' too large');
-  if(d.over)  p.push(d.over+' past the first '+MAX_LEDS);
-  if(shot.frac > (TIER[sens]||TIER.med)[1] + 1e-6) p.push('threshold raised for a bright background');
+  if(d.shape) p.push(d.shape+' wrong shape');
+  if(d.over)  p.push(d.over+' weaker than the '+MAX_LEDS+' shown');
   return p.length ? 'ignored: ' + p.join(', ') : '';
 }
 
@@ -966,7 +947,8 @@ function footText(){
 function framePayload(){
   const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
   const meta = {
-    w:shot.W, h:shot.H, T:shot.T, Tloc:shot.Tloc, peak:shot.peak, frac:shot.frac, evs:shot.evs,
+    w:shot.W, h:shot.H, T:shot.T, minSat:shot.minSat, peak:shot.peak,
+    nCol:shot.nCol, evs:shot.evs,
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
     ms:shot.ms, msBracket:shot.msBracket,
     caps:{ exposure: !!(caps && caps.exposureCompensation),
@@ -974,7 +956,8 @@ function framePayload(){
     leds: shot.leds.map((b,i)=>{
       const m=b.meas, src=m.pick.src;
       return { n:i+1, cx:Math.round(b.cx), cy:Math.round(b.cy), area:b.area, pad:b.pad,
-               peak:b.peak, surround:Math.round(b.surround), lowIso:!!b.lowIso,
+               peak:b.peak, satc:+b.satc.toFixed(3), score:Math.round(b.score),
+             surround:Math.round(b.surround), lowIso:!!b.lowIso,
                label:b.res.label, note:b.res.note, ev:m.ev,
                hue: b.res.hue===null ? null : +b.res.hue.toFixed(1),
                sat: src ? +(src.sat).toFixed(3) : null,
@@ -1083,7 +1066,7 @@ function markSizes(){
     b.classList.toggle('sel', Math.abs(parseFloat(b.dataset.size)-sampleFactor) < 1e-6));
 }
 document.querySelectorAll('[data-sens]').forEach(b=>{
-  b.addEventListener('click', ()=>{ sens=b.dataset.sens; save('dalton.sens',sens); markSens(); });
+  b.addEventListener('click', ()=>{ sens=b.dataset.sens; save('dalton.sens2',sens); markSens(); });
 });
 function markSens(){
   document.querySelectorAll('[data-sens]').forEach(b=> b.classList.toggle('sel', b.dataset.sens===sens));

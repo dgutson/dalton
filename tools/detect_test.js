@@ -19,7 +19,7 @@ const stub = `
   var bracketOn = false;
 `;
 const run = new Function("SIMPLE_MODE", stub + src + `
-  return {detectBlobs, measureBlobs, TIER, FLOOR, MAX_LEDS};
+  return {detectBlobs, measureBlobs, TIER, MAX_LEDS};
 `);
 
 

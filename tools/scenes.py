@@ -1,133 +1,173 @@
 """Synthetic LED scenes, with ground truth, for tools/check.sh.
 
-Emissive sources with a gaussian profile that clips where it goes over 255 — which is
-the whole difficulty: an LED core carries no hue, only its fringe does. The detector
-and the naming both live in index.html and are tested there, by running the real
-JavaScript under quickjs. Nothing here duplicates them, so nothing here can drift.
+Rebuilt against measurements from a real capture (see corpus/), because the first
+version modelled LEDs that do not exist. Three things it had wrong:
+
+  * Real indicator LEDs CLIP. A camera auto-exposing for a room puts any LED bright
+    enough to read as "on" at the top of its range. The old scenes had dim LEDs
+    peaking at 70-150, which sent the detector chasing local contrast and straight
+    into the wood grain.
+  * They are SMALL. Seven LEDs on a router eight feet away were 8-11 pixels each in
+    a 720x1280 frame, not the 50-pixel discs modelled before.
+  * The hard negatives are specular highlights and texture, not plain noise. A
+    highlight clips too — but white, because it reflects the illuminant, where an
+    LED clips coloured because it emits its own narrow band.
+
+The detector and the naming both live in index.html and are tested by running the
+real JavaScript under quickjs. Nothing here duplicates them, so nothing can drift.
 """
-import numpy as np, os, json, sys
+import numpy as np, os, json, sys, colorsys
 
-def led(img,cx,cy,r,rgb_,gain):
-    """Emissive spot: gaussian core, clips where it goes over 255."""
-    H,W=img.shape[:2]
-    y,x=np.ogrid[max(0,cy-4*r):min(H,cy+4*r), max(0,cx-4*r):min(W,cx+4*r)]
-    g=np.exp(-(((x-cx)**2+(y-cy)**2)/(2.0*r*r)))*gain
-    sl=(slice(max(0,cy-4*r),min(H,cy+4*r)), slice(max(0,cx-4*r),min(W,cx+4*r)))
-    for c in range(3):
-        img[sl][:,:,c]+=g*rgb_[c]
-
-def hue_led(h, s=1.0):
-    """RGB for a hue, full saturation — the colour an LED's unclipped fringe shows."""
-    import colorsys
+def hue_rgb(h, s=1.0):
     return colorsys.hsv_to_rgb((h % 360) / 360.0, s, 1.0)
 
-def router(W=1280, H=720, bg=18, lamp=None):
-    """A router panel: 7 LEDs top to bottom, red / green / yellow only, with the
-    brightness spread that broke the old detector — the top one blazing, the rest
-    progressively dimmer. Hues are where real indicator LEDs actually land."""
-    img = np.full((H, W, 3), float(bg))
-    img += np.random.default_rng(7).normal(0, 2.0, img.shape)
-    img[180:620, 480:800] += 22                      # router body
-    spec = [(120, 900), (120, 320), (35, 150), (120, 120),
-            (4, 95), (35, 80), (120, 70)]            # (hue, gain)
-    cx, y = 640, 240
+def spot(img, cx, cy, sigma, rgb, gain):
+    """Emissive point source: gaussian, clipped by the caller at 255."""
+    H, W = img.shape[:2]
+    y0, y1 = max(0, cy - 5*sigma), min(H, cy + 5*sigma)
+    x0, x1 = max(0, cx - 5*sigma), min(W, cx + 5*sigma)
+    if y1 <= y0 or x1 <= x0: return
+    y, x = np.ogrid[y0:y1, x0:x1]
+    g = np.exp(-(((x-cx)**2 + (y-cy)**2) / (2.0*sigma*sigma))) * gain
+    for c in range(3):
+        img[y0:y1, x0:x1, c] += g * rgb[c]
+
+def led(img, cx, cy, hue, sigma=3, gain=1400):
+    """An indicator LED: small, and bright enough that its core clips."""
+    spot(img, cx, cy, sigma, hue_rgb(hue), gain)
+
+def highlight(img, cx, cy, sigma=3, gain=1200):
+    """A specular highlight. Clips exactly like an LED, but white — it reflects the
+       room's illuminant rather than emitting. The single most important negative."""
+    spot(img, cx, cy, sigma, (1.0, 0.97, 0.93), gain)
+
+def woodgrain(img, y0, y1, x0, x1, seed=1):
+    """Warm, textured, locally contrasty, and NOT saturated — what 24 labels landed on."""
+    r = np.random.default_rng(seed)
+    h, w = y1-y0, x1-x0
+    base = r.normal(0, 1, (h//8+2, w//8+2))
+    base = np.repeat(np.repeat(base, 8, 0), 8, 1)[:h, :w]
+    streak = np.sin(np.linspace(0, 40, w))[None, :] * 14 + base*26
+    img[y0:y1, x0:x1, 0] += 108 + streak
+    img[y0:y1, x0:x1, 1] += 84  + streak*0.8
+    img[y0:y1, x0:x1, 2] += 62  + streak*0.6
+
+def _f(W, H, bg=16, seed=0):
+    return np.full((H, W, 3), float(bg)) + np.random.default_rng(seed).normal(0, 2.0, (H, W, 3))
+
+# ---------------- scenes ----------------
+def router(W, H):
+    """The shape of the real capture: a column of LEDs on a dark body, wood behind,
+       a textured warm background, and grey printed icons between the LEDs."""
+    img = _f(W, H, 14, 7)
+    woodgrain(img, 0, int(H*0.45), int(W*0.4), W)
+    img[int(H*0.35):int(H*0.70), int(W*0.42):int(W*0.60)] = 18      # black router body
+    cx = int(W*0.51); y0 = int(H*0.40); step = int(H*0.035)
     truth = []
-    for h, gain in spec:
-        led(img, cx, y, 7, hue_led(h), gain)
+    for i, h in enumerate([155, 155, 35, 155, 4, 155, 155]):
+        y = y0 + i*step
+        led(img, cx, y, h)
+        img[y+step//2-3:y+step//2+3, cx-4:cx+5] += 120               # grey printed icon
         truth.append((cx, y, h))
-        y += 55
-    if lamp:
-        led(img, lamp[0], lamp[1], 40, (1.0, 0.92, 0.80), 1400)
     return np.clip(img, 0, 255).astype(np.uint8), truth
 
-def sweep(W=1280, H=720):
-    """One LED per planted hue, 0 to 115 degrees in 5 degree steps, all the same
-    middling brightness. Answers directly: at what hue does this app stop saying RED
-    and start saying YELLOW, and likewise YELLOW to GREEN."""
-    img = np.full((H, W, 3), 16.0) + np.random.default_rng(23).normal(0, 2.0, (H, W, 3))
+def highlights(W, H):
+    """LEDs among specular highlights that clip just as hard. Saturation is the only
+       thing that tells them apart."""
+    img = _f(W, H, 30, 9)
+    woodgrain(img, 0, H, 0, W, seed=4)
     truth = []
-    hs = list(range(0, 120, 5))      # 24 LEDs: the per-scan cap, and the range that matters
-    for i, h in enumerate(hs):
-        cx = 90 + (i % 8) * 157
-        cy = 90 + (i // 8) * 150
-        led(img, cx, cy, 9, hue_led(h), 220)
-        truth.append((cx, cy, h))
+    for i, h in enumerate([4, 35, 120, 155]):
+        x = int(W*0.25); y = int(H*0.2) + i*int(H*0.15)
+        led(img, x, y, h); truth.append((x, y, h))
+    for i in range(6):
+        highlight(img, int(W*0.65) + (i % 2)*60, int(H*0.15) + i*int(H*0.12))
     return np.clip(img, 0, 255).astype(np.uint8), truth
 
-def wall(W=1280,H=720):
-    """Two LEDs on a brightly lit wall — the case that used to find nothing."""
-    img=np.full((H,W,3),200.0)
-    img+=np.random.default_rng(3).normal(0,2.0,img.shape)
-    led(img,500,360,9,hue_led(4),260)
-    led(img,780,360,9,hue_led(120),240)
-    return np.clip(img,0,255).astype(np.uint8),[(500,360,4),(780,360,120)]
+def wall(W, H):
+    """Two LEDs on a brightly lit wall — the case that once found nothing."""
+    img = np.full((H, W, 3), 200.0) + np.random.default_rng(3).normal(0, 2.0, (H, W, 3))
+    truth = []
+    for x, h in ((int(W*0.35), 4), (int(W*0.65), 120)):
+        led(img, x, H//2, h); truth.append((x, H//2, h))
+    return np.clip(img, 0, 255).astype(np.uint8), truth
 
-def single(W=1280,H=720,gain=400):
-    img=np.full((H,W,3),16.0)+np.random.default_rng(5).normal(0,2.0,(H,W,3))
-    led(img,640,360,10,hue_led(35),gain)
-    return np.clip(img,0,255).astype(np.uint8),[(640,360,35)]
+def single(W, H):
+    img = _f(W, H, 16, 5)
+    led(img, W//2, H//2, 35, sigma=4)
+    return np.clip(img, 0, 255).astype(np.uint8), [(W//2, H//2, 35)]
 
-def closeup(W=1280,H=720):
-    """Phone held right up to one LED: a big blob, plus two smaller neighbours."""
-    img=np.full((H,W,3),20.0)+np.random.default_rng(11).normal(0,2.0,(H,W,3))
-    led(img,640,360,55,hue_led(120),700)
-    led(img,300,360,14,hue_led(4),180)
-    led(img,980,360,14,hue_led(35),140)
-    return np.clip(img,0,255).astype(np.uint8),[(640,360,120),(300,360,4),(980,360,35)]
+def closeup(W, H):
+    """Phone held right against one LED, two smaller ones either side."""
+    img = _f(W, H, 20, 11)
+    truth = []
+    for x, h, sg in ((W//2, 120, 22), (int(W*0.2), 4, 5), (int(W*0.8), 35, 5)):
+        led(img, x, H//2, h, sigma=sg); truth.append((x, H//2, h))
+    return np.clip(img, 0, 255).astype(np.uint8), truth
 
-def nothing(W=1280,H=720):
-    """A plain dim room. Anything found here is a false alarm."""
-    img=np.full((H,W,3),42.0)+np.random.default_rng(13).normal(0,3.0,(H,W,3))
-    img[300:500,200:900]+=30
-    return np.clip(img,0,255).astype(np.uint8),[]
+def nothing(W, H):
+    """A plain room with wood and a highlight. Anything found here is a false alarm."""
+    img = _f(W, H, 40, 13)
+    woodgrain(img, 0, int(H*0.6), 0, W, seed=6)
+    highlight(img, int(W*0.7), int(H*0.75), sigma=5)
+    return np.clip(img, 0, 255).astype(np.uint8), []
 
-def window_scene(W=1280,H=720):
-    """Router bezel beside a blown-out window: a hard 200-level step edge."""
-    img=np.full((H,W,3),22.0)+np.random.default_rng(17).normal(0,2.0,(H,W,3))
-    img[80:640, 760:1240]=250.0                     # window, hard edged
-    for i,(h,gain) in enumerate([(120,300),(35,110),(4,80),(120,70)]):
-        led(img,420,220+i*60,8,hue_led(h),gain)
-    led(img,700,400,8,hue_led(120),120)             # LED 60px from the window edge
-    return np.clip(img,0,255).astype(np.uint8),[(420,220,120),(420,280,35),(420,340,4),
-                                                (420,400,120),(700,400,120)]
+def window_scene(W, H):
+    """LEDs beside a blown-out window: a hard 200-level step edge."""
+    img = _f(W, H, 22, 17)
+    img[int(H*0.1):int(H*0.8), int(W*0.6):] = 252.0
+    truth = []
+    for i, h in enumerate([155, 35, 4, 155]):
+        x, y = int(W*0.3), int(H*0.2) + i*int(H*0.1)
+        led(img, x, y, h); truth.append((x, y, h))
+    x, y = int(W*0.55), int(H*0.5)
+    led(img, x, y, 155); truth.append((x, y, 155))        # 5% from the window edge
+    return np.clip(img, 0, 255).astype(np.uint8), truth
 
-# ---------------- candidate: union of local contrast and global peak ----------------
-# They fail on opposite cases. Local contrast loses an LED so big it becomes its own
-# background (phone held right against it); the global peak loses every LED dimmer than
-# a fraction of the brightest thing in shot. Neither is redundant, both are cheap, and
-# an extra false light is cheaper than a missed one. So: OR the two masks.
-TIER={'low':(55,0.90),'med':(35,0.82),'high':(25,0.68)}
+def sweep(W, H):
+    """One LED per hue, 0 to 115 degrees in 5 degree steps — 24, the per-scan cap.
+       Answers directly where RED becomes YELLOW and YELLOW becomes GREEN."""
+    img = _f(W, H, 16, 23)
+    truth = []
+    hs = list(range(0, 120, 5))
+    for i, h in enumerate(hs):
+        x = int(W*0.1) + (i % 4) * int(W*0.26)
+        y = int(H*0.08) + (i // 4) * int(H*0.15)
+        led(img, x, y, h); truth.append((x, y, h))
+    return np.clip(img, 0, 255).astype(np.uint8), truth
 
+def dim(W, H):
+    """KNOWN LIMIT, not a pass/fail: an LED too dim to clip. The detector is built on
+       the fact that indicator LEDs reach the top of the sensor's range; one that does
+       not is indistinguishable from a reflective highlight in a single exposure."""
+    img = _f(W, H, 16, 29)
+    led(img, W//2, H//2, 120, sigma=4, gain=110)
+    return np.clip(img, 0, 255).astype(np.uint8), [(W//2, H//2, 120)]
 
-SCENES = {
-    'router':     lambda W,H: router(W,H),
-    'routerlamp': lambda W,H: router(W,H, lamp=(1050,150)),
-    'wall':       lambda W,H: wall(W,H),
-    'single':     lambda W,H: single(W,H),
-    'closeup':    lambda W,H: closeup(W,H),
-    'empty':      lambda W,H: nothing(W,H),
-    'window':     lambda W,H: window_scene(W,H),
-    'sweep':      lambda W,H: sweep(W,H),
-}
+SCENES = {'router': router, 'highlights': highlights, 'wall': wall, 'single': single,
+          'closeup': closeup, 'empty': nothing, 'window': window_scene,
+          'sweep': sweep, 'dim': dim}
 TITLES = {
-    'router':     'router, 7 LEDs top to bottom',
-    'routerlamp': 'the same, with a lamp in shot',
+    'router':     'router column, wood + printed icons',
+    'highlights': 'LEDs among white specular highlights',
     'wall':       '2 LEDs on a brightly lit wall',
     'single':     'one LED, dark room',
     'closeup':    'close-up: 1 huge LED + 2 small',
-    'empty':      'empty room, no LEDs at all',
+    'empty':      'empty room, wood + a highlight',
     'window':     '5 LEDs beside a blown-out window',
     'sweep':      'hue sweep, 0-115 deg in 5 deg steps',
+    'dim':        'KNOWN LIMIT: an LED too dim to clip',
 }
+EXPECT_FAIL = {'dim'}          # documented, not a regression
 
 if __name__ == '__main__':
-    d = sys.argv[1]; W, H = 1280, 720
+    d = sys.argv[1]; W, H = 720, 1280          # portrait, like the real captures
     os.makedirs(d, exist_ok=True)
     truth = {}
     for name, mk in SCENES.items():
         img, tr = mk(W, H)
         np.dstack([img, np.full((H, W), 255, np.uint8)]).tofile(f'{d}/{name}.rgba')
         truth[name] = tr
-    json.dump({'w': W, 'h': H, 'truth': truth, 'titles': TITLES},
-              open(f'{d}/truth.json', 'w'))
+    json.dump({'w': W, 'h': H, 'truth': truth, 'titles': TITLES,
+               'expect_fail': sorted(EXPECT_FAIL)}, open(f'{d}/truth.json', 'w'))
     print(f'{len(SCENES)} scenes -> {d}')
