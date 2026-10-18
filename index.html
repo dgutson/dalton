@@ -7,7 +7,7 @@
 <style>
   :root{
     --bg:#0b0d10; --panel:#14181d; --line:#2a313a; --fg:#eef2f6; --dim:#9aa6b2;
-    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --sel:#2d6cdf;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
@@ -15,9 +15,12 @@
   #stage{position:fixed;inset:0;display:flex;flex-direction:column}
   #camwrap{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
   video{width:100%;height:100%;object-fit:cover;display:block}
+  #ov{position:absolute;inset:0;display:none}
+  #ov.on{display:block}
   #reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
     border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.6), inset 0 0 0 2px rgba(0,0,0,.4);
     pointer-events:none;width:120px;height:120px}
+  #reticle.hide{display:none}
   #reticle::before,#reticle::after{content:"";position:absolute;background:rgba(255,255,255,.85)}
   #reticle::before{left:50%;top:-10px;bottom:-10px;width:1px;margin-left:-.5px}
   #reticle::after{top:50%;left:-10px;right:-10px;height:1px;margin-top:-.5px}
@@ -28,9 +31,17 @@
   .tbtn{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(10,12,15,.72);
     color:var(--fg);font-size:19px;display:grid;place-items:center;backdrop-filter:blur(6px)}
   .tbtn.off{color:#6b7682}
+  #shutter{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);height:48px;min-width:118px;
+    padding:0 22px;border-radius:999px;border:2px solid rgba(255,255,255,.8);background:rgba(10,12,15,.74);
+    color:#fff;font-size:15px;font-weight:800;letter-spacing:.11em;backdrop-filter:blur(6px)}
+  #shutter.on{background:var(--sel);border-color:#fff}
+  #shutter[disabled]{opacity:.5}
 
   #panel{background:var(--panel);border-top:1px solid var(--line);padding:12px 14px calc(12px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;gap:9px}
+  #panel.scan{max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #panel.scan #bar{display:none}
+  #panel:not(.scan) #list{display:none}
   #nameRow{display:flex;align-items:center;gap:12px}
   #swatch{width:54px;height:54px;border-radius:12px;border:2px solid var(--line);flex:none;background:#000}
   #name{font-size:42px;line-height:1;font-weight:800;letter-spacing:.02em;flex:1;min-width:0;
@@ -38,11 +49,23 @@
   #name.small{font-size:27px}
   #name.xsmall{font-size:20px;letter-spacing:0;white-space:normal;line-height:1.1}
   .tbtn.mode{width:auto;min-width:74px;padding:0 12px;font-size:13px;font-weight:800;letter-spacing:.07em}
-  .tbtn.mode.on{background:#2d6cdf;border-color:#2d6cdf;color:#fff}
+  .tbtn.mode.on{background:var(--sel);border-color:var(--sel);color:#fff}
   #note{font-size:14px;line-height:1.3;color:var(--warn);min-height:18px;font-weight:600}
   #note.ok{color:var(--ok)} #note.bad{color:var(--bad)} #note.dim{color:var(--dim);font-weight:500}
   #bar{width:100%;height:42px;display:block;border-radius:8px;border:1px solid var(--line)}
   #stats{font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);white-space:pre}
+
+  #list{flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .li{display:flex;gap:10px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--line)}
+  .li:last-child{border-bottom:0}
+  .li.sel{background:#1b2740}
+  .li .num{width:27px;height:27px;flex:none;border-radius:7px;background:#0b0d10;border:1px solid var(--line);
+    display:grid;place-items:center;font:700 14px system-ui,sans-serif}
+  .li.sel .num{background:var(--sel);border-color:var(--sel)}
+  .li .lt{min-width:0;display:flex;flex-direction:column;line-height:1.3}
+  .li .lt b{font-size:15px;letter-spacing:.02em}
+  .li .lt span{font-size:12px;color:var(--dim)}
+  .li.foot{display:block;font:12px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);white-space:normal}
 
   #sheet{position:fixed;inset:0;background:rgba(5,7,9,.96);z-index:20;display:none;
     flex-direction:column;padding:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -54,7 +77,7 @@
   .row .val{font:13px ui-monospace,Menlo,monospace;color:var(--dim);min-width:52px;text-align:right}
   .sbtn{min-width:44px;height:40px;border-radius:10px;border:1px solid var(--line);background:#1b2128;color:var(--fg);
     font-size:16px;font-weight:700;padding:0 12px}
-  .sbtn.sel{background:#2d6cdf;border-color:#2d6cdf}
+  .sbtn.sel{background:var(--sel);border-color:var(--sel)}
   .wide{width:100%;height:48px;margin-top:14px;font-size:16px}
   input[type=range]{flex:1;accent-color:#2d6cdf}
   p.hint{font-size:13px;color:var(--dim);line-height:1.5;margin:6px 0 0}
@@ -63,7 +86,7 @@
     align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
   #start h1{font-size:30px;margin:0}
   #start p{color:var(--dim);font-size:15px;line-height:1.55;margin:0;max-width:30em}
-  #go{padding:18px 44px;font-size:19px;font-weight:700;border-radius:14px;border:0;background:#2d6cdf;color:#fff}
+  #go{padding:18px 44px;font-size:19px;font-weight:700;border-radius:14px;border:0;background:var(--sel);color:#fff}
   #err{color:var(--bad);font-size:14px;max-width:30em}
 </style>
 </head>
@@ -72,6 +95,7 @@
 <div id="stage">
   <div id="camwrap">
     <video id="video" playsinline autoplay muted></video>
+    <canvas id="ov"></canvas>
     <div id="reticle"></div>
     <div id="frozen">FROZEN</div>
     <div id="toolbar">
@@ -79,14 +103,16 @@
       <button class="tbtn" id="bSpeak" title="speech">&#128266;</button>
       <button class="tbtn" id="bSet" title="settings">&#9881;</button>
     </div>
+    <button id="shutter">SCAN</button>
   </div>
   <div id="panel">
     <div id="nameRow">
       <div id="swatch"></div>
       <div id="name">—</div>
     </div>
-    <div id="note" class="dim">Point the circle at one LED. Tap the image to freeze.</div>
+    <div id="note" class="dim">Point the circle at one LED, or press SCAN to name every LED in the picture.</div>
     <canvas id="bar" width="720" height="84"></canvas>
+    <div id="list"></div>
     <div id="stats"></div>
   </div>
 </div>
@@ -101,7 +127,25 @@
     <button class="sbtn" data-size="0.10">M</button>
     <button class="sbtn" data-size="0.18">L</button>
   </div>
-  <p class="hint">Small = one LED. Large = diffuse or distant sources.</p>
+  <p class="hint">Small = one LED. Large = diffuse or distant sources. Live mode only.</p>
+
+  <h3>Scan</h3>
+  <div class="row">
+    <div class="lab">Find lights that are</div>
+    <button class="sbtn" data-sens="low">strict</button>
+    <button class="sbtn" data-sens="med">normal</button>
+    <button class="sbtn" data-sens="high">loose</button>
+  </div>
+  <p class="hint">How much brighter than the brightest point a thing must be to count as a light.
+     Strict finds only the obvious ones; loose also picks up dim or distant ones — and more false alarms,
+     which is the safer way round. Raised automatically if a bright background would otherwise swallow
+     everything.</p>
+  <div class="row">
+    <div class="lab">Bracket exposure</div>
+    <button class="sbtn" id="brBtn">on</button>
+  </div>
+  <p class="hint">Takes two extra darker shots and reads each light from whichever one blew out least.
+     Slower (about a second) but it is the main defence against a clipped core. Needs camera exposure control.</p>
 
   <h3>Camera</h3>
   <div class="row" id="rowExp">
@@ -131,25 +175,27 @@
 <script>
 "use strict";
 
+function $(id){ return document.getElementById(id); }
+function load(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
+function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 /* ---------- colour bands ---------- */
 const NAMES  = ['RED','AMBER','YELLOW','LIME','GREEN','CYAN','BLUE','VIOLET','MAGENTA'];
 const ABBR   = ['R','A','Y','L','G','C','B','V','M'];
 const SWATCH = ['#ff2b1f','#ff8c00','#ffe000','#b4ff00','#00e05a','#00e5e5','#2b6bff','#9b4dff','#ff3fa4'];
-const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];
+const DEF_BOUNDS = [345,12,40,68,88,160,200,250,288];     // band i spans bounds[i] -> bounds[i+1]
 // Simplified mode: one bucket per band. null = the yellow-green zone, which is
 // genuinely ambiguous on this hardware and is reported as unsure rather than guessed.
 //              RED     AMBER     YELLOW   LIME   GREEN    CYAN     BLUE     VIOLET   MAGENTA
 const SIMPLE = ['RED', 'YELLOW', 'YELLOW', null, 'GREEN', 'OTHER', 'OTHER', 'OTHER', 'OTHER'];
 const SIMPLE_CSS = {RED:'#ff2b1f', YELLOW:'#ffe000', GREEN:'#00e05a', OTHER:'#9aa6b2'};
 const UNSURE_CSS = '#b4ff00';
-const S_ORDER = {RED:0, YELLOW:1, GREEN:2, OTHER:3};   // canonical order for "X OR Y"   // band i spans bounds[i] -> bounds[i+1]
+const S_ORDER = {RED:0, YELLOW:1, GREEN:2, OTHER:3};      // canonical order for "X OR Y"
 let BOUNDS = load('dalton.bounds', DEF_BOUNDS).slice();
 
-function load(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
-function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-
 const norm = a => ((a % 360) + 360) % 360;
-const cycFwd = (from,to) => norm(to - from);                 // distance going forwards
+const cycFwd = (from,to) => norm(to - from);              // distance going forwards
 const cycAbs = (a,b) => { const d = Math.abs(norm(a-b)); return Math.min(d, 360-d); };
 
 function bandOf(h){
@@ -164,17 +210,23 @@ function bandOf(h){
 /* ---------- sampling + analysis ---------- */
 const MINSAT = 0.15, MINSAT2 = 0.05, DARK = 28, CLIP = 250;
 
-function analyse(data, S, minsat){
-  const r0 = S/2, rr = r0*r0, c = r0 - 0.5;
+// Hue statistics over a rectangle of an RGBA buffer that is `stride` pixels wide.
+//   circle        – mask to the inscribed circle (the live reticle)
+//   labels, self  – skip pixels belonging to a *different* blob, so two adjacent
+//                   LEDs cannot bleed into each other's reading
+function analyseRect(data, stride, x0, y0, w, h, minsat, circle, labels, self){
+  const cx = x0 + w/2 - 0.5, cy = y0 + h/2 - 0.5;
+  const r0 = Math.min(w,h)/2, rr = r0*r0;
   let n=0, nDark=0, nClip=0, nGray=0, nUse=0;
   let sx=0, sy=0, wsum=0, satSum=0, valSum=0, valAll=0;
 
-  for(let y=0;y<S;y++){
-    const dy = y - c;
-    for(let x=0;x<S;x++){
-      const dx = x - c;
-      if(dx*dx + dy*dy > rr) continue;
-      const i = (y*S + x) << 2;
+  for(let y=y0;y<y0+h;y++){
+    const dy = y - cy;
+    for(let x=x0;x<x0+w;x++){
+      if(circle){ const dx = x - cx; if(dx*dx + dy*dy > rr) continue; }
+      const p = y*stride + x;
+      if(labels){ const L = labels[p]; if(L !== 0 && L !== self) continue; }
+      const i = p << 2;
       const R=data[i], G=data[i+1], B=data[i+2];
       n++;
       const mx = R>G ? (R>B?R:B) : (G>B?G:B);
@@ -187,13 +239,13 @@ function analyse(data, S, minsat){
       const d = mx - mn, s = d / mx;
       if(s < minsat){ nGray++; continue; }
 
-      let h;
-      if(mx===R)      h = 60*((G-B)/d);
-      else if(mx===G) h = 60*((B-R)/d + 2);
-      else            h = 60*((R-G)/d + 4);
-      h = norm(h) * Math.PI/180;
+      let hh;
+      if(mx===R)      hh = 60*((G-B)/d);
+      else if(mx===G) hh = 60*((B-R)/d + 2);
+      else            hh = 60*((R-G)/d + 4);
+      hh = norm(hh) * Math.PI/180;
 
-      sx += s*Math.cos(h); sy += s*Math.sin(h); wsum += s;
+      sx += s*Math.cos(hh); sy += s*Math.sin(hh); wsum += s;
       satSum += s; valSum += mx; nUse++;
     }
   }
@@ -204,20 +256,275 @@ function analyse(data, S, minsat){
            sat: nUse? satSum/nUse : 0, val: nUse? valSum/nUse : 0,
            valAll: n? valAll/n : 0 };
 }
+function analyse(data, S, minsat){ return analyseRect(data, S, 0, 0, S, S, minsat, true, null, 0); }
+
+// Strict pass first; the low-saturation pass costs a second sweep and is only worth
+// running when the strict one came back empty.
+function twoPass(data, stride, x0, y0, w, h, circle, labels, self){
+  const a = analyseRect(data, stride, x0, y0, w, h, MINSAT, circle, labels, self);
+  const b = (a.nUse >= a.minUse) ? null
+          : analyseRect(data, stride, x0, y0, w, h, MINSAT2, circle, labels, self);
+  return {a, b};
+}
+
+/* ---------- naming ---------- */
+function pickSource(a, b){
+  if(a.nUse >= a.minUse) return {src:a, washed:false};
+  if(b && b.nUse >= b.minUse && b.conc >= 0.90 && b.sat >= 0.09) return {src:b, washed:true};
+  return {src:null, washed:false};
+}
+
+function nameIt(hue, src, a, washed, live){
+  const band = bandOf(hue);
+  const sm = simple ? simpleOf(hue, band) : null;
+  const label  = sm ? sm.label : NAMES[band];
+  const swatch = sm ? sm.css   : SWATCH[band];
+  const nb = nearestBoundary(hue);
+  let note, cls='';
+  if(washed){ note = 'WASHED OUT — only a faint tint survives, lower exposure to confirm'; }
+  else if(src.conc < 0.80){
+    note = 'UNCERTAIN — hue is scattered, ' + (live ? 'steady the camera' : 'more than one colour in this spot');
+  }
+  else if(sm){
+    if(sm.unsure){ note = 'UNSURE — hue ' + hue.toFixed(0) + '° ' + sm.why; }
+    else { note = 'confident'; cls='ok'; }
+  }
+  else if(nb.dist < 6){
+    note = 'BORDERLINE — ' + nb.dist.toFixed(0) + '° from the '
+         + NAMES[nb.lo] + '/' + NAMES[nb.hi] + ' edge';
+  } else { note = 'confident'; cls='ok'; }
+  if(!washed && src.nClip/src.n > 0.5) note += ' · reading the fringe, core is clipped';
+  return {label, swatch, note, cls, band, sure: cls==='ok'};
+}
+
+// Nothing nameable inside the reticle.
+function liveFallback(a, b){
+  const f = b || a;
+  if(f.nUse >= f.minUse && f.sat < 0.09 && a.nClip/a.n > 0.20)
+    return white('Bright with no hue — a white LED');
+  if(a.nClip/a.n > 0.25) return bad('TOO BRIGHT','Move back, or lower exposure in settings');
+  if(a.nDark/a.n > 0.80) return bad('OFF / DARK','Nothing emitting inside the circle');
+  if(a.valAll > 90)      return white('Bright but no hue — white, or washed out');
+  return bad('NO CLEAR COLOUR','Fill more of the circle with the LED');
+}
+
+// Nothing nameable around a detected blob. Neither the darkness ratio nor the mean
+// value means anything here — a blob's padded box is mostly background by
+// construction — so the live-mode tests do not transfer.
+function scanFallback(a, b){
+  const f = b || a;
+  const bright = Math.max(1, a.n - a.nDark);
+  const graded = a.nGray + a.nUse;        // bright, unclipped, hue question answered
+  // A detected blob is bright by definition. If its unclipped fringe exists but
+  // carries no saturation, the LED is white — not merely unreadable.
+  if(graded >= 10 && a.nGray/graded > 0.80) return white('Bright with no hue — a white LED');
+  if(f.nUse >= f.minUse && f.sat < 0.09)    return white('Bright with no hue — a white LED');
+  if(a.nClip/bright > 0.60)
+    return bad('TOO BRIGHT','Core still blown out at the lowest exposure — move back');
+  return bad('NO CLEAR COLOUR','Too small or too dim to read — move closer');
+}
+function white(note){
+  return { label: simple ? 'OTHER' : 'WHITE', note, cls:'', band:-1, sure:false,
+           swatch: simple ? SIMPLE_CSS.OTHER : '#f2f2f2' };
+}
+function bad(label, note){ return {label, note, cls:'bad', swatch:'#000', band:-1, sure:false}; }
+
+// Collapse to RED / YELLOW / GREEN / OTHER. With only four answers each cut carries
+// more weight, so a hue sitting on one is reported as both rather than rounded off.
+function simpleOf(hue, band){
+  const bk = SIMPLE[band];
+  const nb = nearestBoundary(hue);
+  const nbr = (nb.dist < 6) ? (SIMPLE[nb.lo] === bk ? SIMPLE[nb.hi] : SIMPLE[nb.lo]) : bk;
+  if(bk === null || nbr === null)
+    return { label:'YELLOW OR GREEN', unsure:true, css:UNSURE_CSS,
+             why:'sits between yellow and green — note which LED this is' };
+  // Hedge only between the three colours that carry meaning. A hue near the edge of
+  // OTHER is not worth hedging — OTHER is not a state you act on, and red LEDs sit
+  // close enough to the magenta cut that it would fire constantly.
+  if(nbr !== bk && bk !== 'OTHER' && nbr !== 'OTHER'){
+    const pair = [bk, nbr].sort((x,y)=>S_ORDER[x]-S_ORDER[y]);
+    return { label: pair[0] + ' OR ' + pair[1], unsure:true, css:UNSURE_CSS,
+             why:'right on the ' + pair[0].toLowerCase() + '/' + pair[1].toLowerCase() + ' cut' };
+  }
+  return { label: bk, unsure:false, css: SIMPLE_CSS[bk] };
+}
+
+function nearestBoundary(h){
+  let best=1e9, idx=0;
+  for(let i=0;i<9;i++){ const d=cycAbs(h, BOUNDS[i]); if(d<best){best=d; idx=i;} }
+  return { dist:best, lo:(idx+8)%9, hi:idx };
+}
+
+/* ---------- blob detection ----------
+   The easy half. LEDs are the brightest things in frame and their cores clip, so a
+   threshold on value plus connected components finds them. The colour is deliberately
+   NOT read from the core — that is the clipped part and carries no hue — but from a
+   padded box around each blob, where the unclipped fringe lives. */
+const SENS = {low:0.90, med:0.82, high:0.68};   // fraction of the frame's peak value
+// Isolation cutoff. A blob over it is *flagged*, never dropped: a spare false positive
+// is cheap to ignore on screen, a missing LED is not.
+const ISO = 0.75;
+
+// One oversized blob means the threshold was too low and a bright background merged
+// into a single region — which swallows any LED sitting on it. Step the threshold up
+// until nothing is oversized, rather than silently dropping the lot.
+function detectAdaptive(data, W, H, frac){
+  const maxArea = Math.round(W*H*0.10);
+  const ladder = [frac];
+  for(const f of [0.82, 0.90, 0.95]) if(f > frac + 1e-6) ladder.push(f);
+  let det = null;
+  for(const f of ladder){
+    det = detectBlobs(data, W, H, f);
+    det.frac = f;
+    if(!det.blobs.some(b => b.area > maxArea)) break;
+  }
+  return det;
+}
+
+function detectBlobs(data, W, H, frac){
+  const N = W*H;
+  const val = new Uint8Array(N);
+  let peak = 0;
+  for(let p=0;p<N;p++){
+    const i=p<<2; const R=data[i], G=data[i+1], B=data[i+2];
+    const mx = R>G ? (R>B?R:B) : (G>B?G:B);
+    val[p]=mx; if(mx>peak) peak=mx;
+  }
+  const T = Math.max(100, Math.round(peak*frac));
+
+  const labels = new Int32Array(N);               // 0 = background
+  const stack  = new Int32Array(N);               // every pixel is pushed at most once
+  const blobs = [];
+  let next = 1;
+  for(let p0=0;p0<N;p0++){
+    if(val[p0] < T || labels[p0]) continue;
+    const id = next++;
+    let sp=0; stack[sp++]=p0; labels[p0]=id;
+    let area=0, sumx=0, sumy=0, bx0=W, by0=H, bx1=0, by1=0, bpeak=0;
+    while(sp){
+      const q = stack[--sp];
+      const qx = q % W, qy = (q / W) | 0;
+      area++; sumx+=qx; sumy+=qy;
+      if(qx<bx0)bx0=qx; if(qx>bx1)bx1=qx;
+      if(qy<by0)by0=qy; if(qy>by1)by1=qy;
+      if(val[q]>bpeak) bpeak=val[q];
+      for(let dy=-1;dy<=1;dy++){
+        const ny=qy+dy; if(ny<0||ny>=H) continue;
+        for(let dx=-1;dx<=1;dx++){
+          const nx=qx+dx; if(nx<0||nx>=W) continue;
+          const r = ny*W+nx;
+          if(labels[r] || val[r] < T) continue;
+          labels[r]=id; stack[sp++]=r;
+        }
+      }
+    }
+    blobs.push({id, area, cx:sumx/area, cy:sumy/area, x0:bx0, y0:by0, x1:bx1, y1:by1, peak:bpeak});
+  }
+  return {labels, val, blobs, T, peak};
+}
+
+const MAX_LEDS = 24;
+
+function measureBlobs(frames, det, W, H){
+  const {labels, val, blobs} = det;
+  const minArea = 6;
+  const maxArea = Math.round(W*H*0.10);
+  const drop = {small:0, big:0, over:0};
+
+  const cand = blobs.filter(b=>{
+    if(b.area < minArea){ drop.small++; return false; }
+    if(b.area > maxArea){ drop.big++;   return false; }
+    b.rad = Math.sqrt(b.area/Math.PI);
+    return true;
+  });
+
+  const kept = [];
+  for(const b of cand){
+    // Reach outwards for the unclipped fringe, but never into a neighbour's.
+    let pad = Math.max(3, Math.round(b.rad*0.9));
+    for(const o of cand){
+      if(o===b) continue;
+      const gap = Math.hypot(o.cx-b.cx, o.cy-b.cy) - o.rad - b.rad;
+      if(gap > 0) pad = Math.min(pad, Math.max(2, Math.round(gap/2)));
+    }
+    const x0=Math.max(0,b.x0-pad), y0=Math.max(0,b.y0-pad);
+    const x1=Math.min(W-1,b.x1+pad), y1=Math.min(H-1,b.y1+pad);
+    const bw=x1-x0+1, bh=y1-y0+1;
+    b.pad = pad; b.box = {x0,y0,w:bw,h:bh};
+
+    // Isolation test. A real indicator sits in the dark. A patch of lit wall or a
+    // window labels too, but its surroundings are nearly as bright as it is. Only the
+    // blatant cases are dropped — see ISO.
+    let sv=0, sn=0;
+    for(let y=y0;y<=y1;y++){
+      const row=y*W;
+      for(let x=x0;x<=x1;x++){
+        const p=row+x;
+        if(labels[p]===b.id) continue;
+        sv += val[p]; sn++;
+      }
+    }
+    b.surround = sn ? sv/sn : 0;
+    b.lowIso = b.surround > b.peak*ISO;
+
+    // Read the colour from whichever exposure kept the most usable pixels.
+    let best=null;
+    for(const f of frames){
+      const t = twoPass(f.data, W, x0, y0, bw, bh, false, labels, b.id);
+      const pick = pickSource(t.a, t.b);
+      const score = pick.src ? pick.src.nUse * pick.src.conc * (pick.washed?0.4:1) : -1;
+      if(!best || score > best.score) best = {score, a:t.a, b2:t.b, pick, ev:f.ev};
+    }
+    b.meas = best;
+    kept.push(b);
+  }
+
+  // Reading order: rows top to bottom, left to right inside a row.
+  const rowH = Math.max(24, H*0.07);
+  kept.sort((p,q)=>{
+    const rp=Math.round(p.cy/rowH), rq=Math.round(q.cy/rowH);
+    return rp!==rq ? rp-rq : p.cx-q.cx;
+  });
+  if(kept.length > MAX_LEDS){ drop.over = kept.length - MAX_LEDS; kept.length = MAX_LEDS; }
+  kept.forEach(b=>{
+    b.res = nameBlob(b);
+    if(b.lowIso){
+      b.res.note += ' · background nearly as bright, may not be an indicator';
+      b.res.sure = false;
+    }
+  });
+  return {kept, drop};
+}
+
+function nameBlob(b){
+  const m = b.meas;
+  if(m.pick.src){
+    const hue = norm(Math.atan2(m.pick.src.vy, m.pick.src.vx)*180/Math.PI);
+    const r = nameIt(hue, m.pick.src, m.a, m.pick.washed, false);
+    r.hue = hue; return r;
+  }
+  const r = scanFallback(m.a, m.b2);
+  r.hue = null; return r;
+}
 
 /* ---------- state ---------- */
 const video=$('video'), cam=$('camwrap'), ret=$('reticle'), panel=$('panel');
 const elName=$('name'), elNote=$('note'), elSwatch=$('swatch'), elStats=$('stats'), bar=$('bar');
 const bctx = bar.getContext('2d');
-const sc = document.createElement('canvas');
+const ov = $('ov'), octx = ov.getContext('2d');
+const sc = document.createElement('canvas');                      // live reticle crop
 const sctx = sc.getContext('2d', {willReadFrequently:true});
+const gc = document.createElement('canvas');                      // full frame grabber
+const gctx = gc.getContext('2d', {willReadFrequently:true});
+const shotc = document.createElement('canvas');                   // the picture we show
 
 let stream=null, track=null, caps={}, frozen=false, speakOn=load('dalton.speak',true);
 let simple = load('dalton.simple', false);
 let sampleFactor = load('dalton.size', 0.10);
+let sens = load('dalton.sens','high');
+let bracketOn = load('dalton.bracket', true);
 let ema=null, stableName='', stableCount=0, spokenName='', wakeLock=null;
-
-function $(id){ return document.getElementById(id); }
+let mode='live', shot=null, selIdx=0, busy=false;
 
 /* ---------- camera ---------- */
 async function start(){
@@ -250,13 +557,13 @@ function sizeReticle(){
   const px = Math.round(S*scale);
   ret.style.width = px+'px'; ret.style.height = px+'px';
 }
-addEventListener('resize', sizeReticle);
+addEventListener('resize', ()=>{ sizeReticle(); if(mode==='scan') drawOverlay(); });
 
-/* ---------- main loop ---------- */
+/* ---------- live loop ---------- */
 let last=0;
 function loop(t){
   requestAnimationFrame(loop);
-  if(frozen || t-last < 150) return;                 // ~6-7 fps is plenty
+  if(mode!=='live' || frozen || t-last < 150) return;   // ~6-7 fps is plenty
   last = t;
   const vw=video.videoWidth, vh=video.videoHeight;
   if(!vw) return;
@@ -264,101 +571,46 @@ function loop(t){
   if(sc.width!==S){ sc.width=sc.height=S; sizeReticle(); }
   sctx.drawImage(video, (vw-S)>>1, (vh-S)>>1, S, S, 0, 0, S, S);
   let img; try{ img = sctx.getImageData(0,0,S,S); }catch(e){ return; }
-  const a = analyse(img.data, S, MINSAT);
-  // only pay for the low-saturation second pass when the strict pass found nothing
-  const b = (a.nUse >= a.minUse) ? null : analyse(img.data, S, MINSAT2);
-  render(a, b);
+  const t2 = twoPass(img.data, S, 0, 0, S, S, true, null, 0);
+  render(t2.a, t2.b);
 }
 
 function render(a, b){
-  let label, cls='dim', note='', swatch='#000', hue=null, band=-1, washed=false, src=null;
-
-  if(a.nUse >= a.minUse) src = a;
-  else if(b && b.nUse >= b.minUse && b.conc >= 0.90 && b.sat >= 0.09){ src = b; washed = true; }
-
-  if(src){
+  const pick = pickSource(a, b);
+  let r, hue=null;
+  if(pick.src){
     // smooth the hue vector so the reading does not jitter frame to frame
-    if(!ema) ema = {x:src.vx, y:src.vy};
-    else { ema.x = ema.x*0.5 + src.vx*0.5; ema.y = ema.y*0.5 + src.vy*0.5; }
-    hue  = norm(Math.atan2(ema.y, ema.x)*180/Math.PI);
-    band = bandOf(hue);
-    const sm = simple ? simpleOf(hue, band) : null;
-    label  = sm ? sm.label : NAMES[band];
-    swatch = sm ? sm.css   : SWATCH[band];
-
-    const nb = nearestBoundary(hue);
-    if(washed){ note = 'WASHED OUT — only a faint tint survives, lower exposure to confirm'; cls=''; }
-    else if(src.conc < 0.80){ note = 'UNCERTAIN — hue is scattered, steady the camera'; cls=''; }
-    else if(sm){
-      if(sm.unsure){ note = 'UNSURE — hue ' + hue.toFixed(0) + '° ' + sm.why; cls=''; }
-      else { note = 'confident'; cls='ok'; }
-    }
-    else if(nb.dist < 6){
-      note = 'BORDERLINE — ' + nb.dist.toFixed(0) + '° from the '
-           + NAMES[nb.lo] + '/' + NAMES[nb.hi] + ' edge'; cls='';
-    } else { note = 'confident'; cls='ok'; }
-    if(!washed && src.nClip/src.n > 0.5) note += ' · reading the fringe, core is clipped';
+    if(!ema) ema = {x:pick.src.vx, y:pick.src.vy};
+    else { ema.x = ema.x*0.5 + pick.src.vx*0.5; ema.y = ema.y*0.5 + pick.src.vy*0.5; }
+    hue = norm(Math.atan2(ema.y, ema.x)*180/Math.PI);
+    r = nameIt(hue, pick.src, a, pick.washed, true);
   } else {
     ema = null;
-    const f = b || a;
-    if(f.nUse >= f.minUse && f.sat < 0.09 && a.nClip/a.n > 0.20){
-      label = simple ? 'OTHER' : 'WHITE';
-      note='Bright with no hue — a white LED'; cls=''; swatch = simple ? SIMPLE_CSS.OTHER : '#f2f2f2';
-    } else if(a.nClip/a.n > 0.25){
-      label='TOO BRIGHT'; note='Move back, or lower exposure in settings'; cls='bad';
-    } else if(a.nDark/a.n > 0.80){
-      label='OFF / DARK'; note='Nothing emitting inside the circle'; cls='bad';
-    } else if(a.valAll > 90){
-      label = simple ? 'OTHER' : 'WHITE';
-      note='Bright but no hue — white, or washed out'; cls=''; swatch = simple ? SIMPLE_CSS.OTHER : '#f2f2f2';
-    } else {
-      label='NO CLEAR COLOUR'; note='Fill more of the circle with the LED'; cls='bad';
-    }
+    r = liveFallback(a, b);
   }
 
-  const st = src || a;
+  const st = pick.src || a;
+  paintName(r.label, r.note, r.cls, r.swatch);
+  elStats.textContent = statLine(hue, r.band, st, a);
+  drawBar(hue, r.band);
+  maybeSpeak(r.label, r.cls);
+}
+
+function paintName(label, note, cls, swatch){
   elName.textContent = label;
   elName.classList.toggle('small',  label.length > 9 && label.length <= 13);
   elName.classList.toggle('xsmall', label.length > 13);
   elNote.textContent = note;
   elNote.className = cls;
   elSwatch.style.background = swatch;
+}
 
-  elStats.textContent =
-    (hue===null ? 'hue    —   ' : 'hue ' + hue.toFixed(0).padStart(3) + '°  ')
+function statLine(hue, band, st, a){
+  return (hue===null ? 'hue    —   ' : 'hue ' + hue.toFixed(0).padStart(3) + '°  ')
     + 'sat ' + (st.sat*100).toFixed(0).padStart(3) + '%  val ' + st.val.toFixed(0).padStart(3)
     + '  agree ' + (st.conc*100).toFixed(0).padStart(3) + '%\n'
     + 'band ' + (band>=0 ? NAMES[band] : '—').padEnd(8)
     + ' px use ' + st.nUse + '  clipped ' + a.nClip + '  dark ' + a.nDark;
-
-  drawBar(hue, band);
-  maybeSpeak(label, cls);
-}
-
-// Collapse to RED / YELLOW / GREEN / OTHER. With only four answers each cut carries
-// more weight, so a hue sitting on one is reported as both rather than rounded off.
-function simpleOf(hue, band){
-  const bk = SIMPLE[band];
-  const nb = nearestBoundary(hue);
-  const nbr = (nb.dist < 6) ? (SIMPLE[nb.lo] === bk ? SIMPLE[nb.hi] : SIMPLE[nb.lo]) : bk;
-  if(bk === null || nbr === null)
-    return { label:'YELLOW OR GREEN', unsure:true, css:UNSURE_CSS,
-             why:'sits between yellow and green — note which LED this is' };
-  // Hedge only between the three colours that carry meaning. A hue near the edge of
-  // OTHER is not worth hedging — OTHER is not a state you act on, and red LEDs sit
-  // close enough to the magenta cut that it would fire constantly.
-  if(nbr !== bk && bk !== 'OTHER' && nbr !== 'OTHER'){
-    const pair = [bk, nbr].sort((x,y)=>S_ORDER[x]-S_ORDER[y]);
-    return { label: pair[0] + ' OR ' + pair[1], unsure:true, css:UNSURE_CSS,
-             why:'right on the ' + pair[0].toLowerCase() + '/' + pair[1].toLowerCase() + ' cut' };
-  }
-  return { label: bk, unsure:false, css: SIMPLE_CSS[bk] };
-}
-
-function nearestBoundary(h){
-  let best=1e9, idx=0;
-  for(let i=0;i<9;i++){ const d=cycAbs(h, BOUNDS[i]); if(d<best){best=d; idx=i;} }
-  return { dist:best, lo:(idx+8)%9, hi:idx };
 }
 
 /* ---------- hue bar: position-encoded, readable without colour vision ---------- */
@@ -405,27 +657,273 @@ function drawBar(hue, band){
   }
 }
 
+/* ---------- scan ---------- */
+const settle = ms => new Promise(r=>setTimeout(r,ms));
+
+function grabFrame(){
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(gc.width!==vw || gc.height!==vh){ gc.width=vw; gc.height=vh; }
+  gctx.drawImage(video,0,0,vw,vh);
+  return gctx.getImageData(0,0,vw,vh);
+}
+
+// The native exposure plus, if the camera allows it, two darker shots. Darker means
+// less clipping, which means more fringe left to read a hue from.
+async function bracket(){
+  const frames = [{ev:0, data:grabFrame().data}];
+  const r = caps.exposureCompensation;
+  if(!bracketOn || !r || !track) return frames;
+  let orig = 0;
+  try{ orig = track.getSettings().exposureCompensation ?? 0; }catch(e){ return frames; }
+  const span = orig - r.min;
+  if(span <= 0.01) return frames;
+  for(const s of [orig - span*0.5, r.min]){
+    try{
+      await track.applyConstraints({advanced:[{exposureCompensation:s}]});
+      await settle(450);                       // let auto-exposure actually converge
+      frames.push({ev:+(s-orig).toFixed(2), data:grabFrame().data});
+    }catch(e){ break; }
+  }
+  try{ await track.applyConstraints({advanced:[{exposureCompensation:orig}]}); }catch(e){}
+  return frames;
+}
+
+async function scan(){
+  if(busy || !video.videoWidth) return;
+  busy = true; $('shutter').disabled = true;
+  $('frozen').textContent='SCANNING…'; $('frozen').classList.add('on');
+  await new Promise(r=>requestAnimationFrame(()=>r()));
+
+  const vw=video.videoWidth, vh=video.videoHeight;
+  shotc.width=vw; shotc.height=vh;
+  shotc.getContext('2d').drawImage(video,0,0,vw,vh);
+
+  let frames, det, out;
+  try{
+    frames = await bracket();
+    det = detectAdaptive(frames[0].data, vw, vh, SENS[sens] || SENS.med);
+    out = measureBlobs(frames, det, vw, vh);
+  }catch(e){
+    $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
+    busy=false; $('shutter').disabled=false;
+    paintName('SCAN FAILED', String(e.message||e), 'bad', '#000');
+    return;
+  }
+
+  shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, peak:det.peak, frac:det.frac,
+           nRaw:det.blobs.length, evs:frames.map(f=>f.ev) };
+  mode='scan'; selIdx=0;
+  paintShutter();
+  ov.classList.add('on'); ret.classList.add('hide'); panel.classList.add('scan');
+  $('frozen').textContent='SCAN'; 
+  drawOverlay(); buildList(); showSel(); speakSummary();
+  busy=false; $('shutter').disabled=false;
+}
+
+function toLive(){
+  mode='live'; shot=null; ema=null; spokenName=''; stableCount=0;
+  ov.classList.remove('on'); ret.classList.remove('hide'); panel.classList.remove('scan');
+  $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
+  frozen=false;
+  paintShutter();
+}
+
+// Map full-resolution frame coordinates onto the displayed area (object-fit: cover).
+function coverMap(){
+  const cw=cam.clientWidth, ch=cam.clientHeight;
+  const s = Math.max(cw/shot.W, ch/shot.H);
+  return {s, dx:(cw - shot.W*s)/2, dy:(ch - shot.H*s)/2, cw, ch};
+}
+
+function shortLabel(s){
+  if(s.indexOf(' OR ') > 0) return s.split(' OR ').map(w=>w.slice(0,3)).join('/');
+  if(s === 'NO CLEAR COLOUR') return 'NO COLOUR';
+  return s;
+}
+function rrect(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+const hits = (p,q) => !(p.x+p.w < q.x || q.x+q.w < p.x || p.y+p.h < q.y || q.y+q.h < p.y);
+
+function drawOverlay(){
+  if(!shot) return;
+  const m = coverMap(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  ov.width = Math.round(m.cw*dpr); ov.height = Math.round(m.ch*dpr);
+  ov.style.width = m.cw+'px';      ov.style.height = m.ch+'px';
+  const g = octx;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,m.cw,m.ch);
+  g.drawImage(shotc, m.dx, m.dy, shot.W*m.s, shot.H*m.s);
+  g.fillStyle='rgba(0,0,0,.30)'; g.fillRect(0,0,m.cw,m.ch);   // so white text stays legible
+
+  const placed=[];
+  shot.leds.forEach((b,i)=>{
+    const X = m.dx + b.cx*m.s, Y = m.dy + b.cy*m.s;
+    const R = Math.max(13, (b.rad + b.pad)*m.s);
+    const on = (i===selIdx);
+    b.hit = {x:X, y:Y, r:Math.max(R, 26)};
+
+    const txt = (i+1) + '  ' + shortLabel(b.res.label) + (!b.res.sure && b.res.label.indexOf('/')<0 && b.res.label.indexOf(' OR ')<0 ? ' ?' : '');
+    g.font = 'bold 15px system-ui,sans-serif';
+    const pw = g.measureText(txt).width + 15, ph = 25;
+    let box = null;
+    const cands = [[X+R+9, Y-ph/2], [X-R-9-pw, Y-ph/2], [X-pw/2, Y-R-9-ph], [X-pw/2, Y+R+9]];
+    for(const c of cands){
+      const q = {x:c[0], y:c[1], w:pw, h:ph};
+      if(q.x<2 || q.y<2 || q.x+pw>m.cw-2 || q.y+ph>m.ch-2) continue;
+      if(placed.some(p=>hits(p,q))) continue;
+      box = q; break;
+    }
+    if(!box){                                     // crowded: slide down, wrapping
+      box = {x: Math.min(Math.max(2, X-pw/2), Math.max(2, m.cw-pw-2)),
+             y: Math.min(Y+R+9, m.ch-ph-2), w:pw, h:ph};
+      for(let k=0; k<40 && placed.some(p=>hits(p,box)); k++){
+        box.y += ph+4;
+        if(box.y + ph > m.ch-2) box.y = 2;
+      }
+    }
+
+    g.strokeStyle='rgba(0,0,0,.85)'; g.lineWidth=3.5;
+    g.beginPath(); g.moveTo(X,Y); g.lineTo(box.x+pw/2, box.y+ph/2); g.stroke();
+    g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=1.2;
+    g.beginPath(); g.moveTo(X,Y); g.lineTo(box.x+pw/2, box.y+ph/2); g.stroke();
+
+    g.lineWidth = on?6:4; g.strokeStyle='#000';
+    g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
+    g.lineWidth = on?3.2:1.8; g.strokeStyle = on ? '#fff' : '#cbd5e1';
+    g.beginPath(); g.arc(X,Y,R,0,6.2832); g.stroke();
+
+    g.fillStyle = on ? 'rgba(45,108,223,.95)' : 'rgba(8,10,13,.9)';
+    rrect(g, box.x, box.y, pw, ph, 7); g.fill();
+    g.strokeStyle = on ? '#fff' : 'rgba(255,255,255,.5)'; g.lineWidth = on?2:1;
+    rrect(g, box.x, box.y, pw, ph, 7); g.stroke();
+    g.fillStyle='#fff'; g.textAlign='left'; g.textBaseline='middle';
+    g.fillText(txt, box.x+8, box.y+ph/2+0.5);
+    placed.push(box);
+  });
+
+  if(!shot.leds.length){
+    g.font='bold 17px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillStyle='rgba(0,0,0,.8)';
+    rrect(g, m.cw/2-110, m.ch/2-20, 220, 40, 10); g.fill();
+    g.fillStyle='#fff'; g.fillText('NO LIGHT FOUND', m.cw/2, m.ch/2);
+  }
+}
+
+function buildList(){
+  const host = $('list'); host.innerHTML='';
+  shot.leds.forEach((b,i)=>{
+    const d=document.createElement('div');
+    d.className = 'li' + (i===selIdx ? ' sel' : '');
+    d.innerHTML = '<div class="num">'+(i+1)+'</div><div class="lt"><b>'+esc(b.res.label)+'</b>'
+      + '<span>' + (b.res.hue===null ? '' : 'hue '+b.res.hue.toFixed(0)+'° · ')
+      + esc(b.res.note) + '</span></div>';
+    d.addEventListener('click', ()=>{ select(i, true); });
+    host.appendChild(d);
+  });
+  const t = footText();
+  if(t){ const d=document.createElement('div'); d.className='li foot'; d.textContent=t; host.appendChild(d); }
+}
+
+// Say out loud what was thrown away. A silent cap reads as "that is everything".
+function footText(){
+  const d=shot.drop, p=[];
+  if(d.small) p.push(d.small+' too small');
+  if(d.big)   p.push(d.big+' too large');
+  if(d.over)  p.push(d.over+' beyond the first '+MAX_LEDS);
+  let s = 'threshold ' + shot.T + '/255 of peak ' + shot.peak
+        + (shot.frac > (SENS[sens]||SENS.med) + 1e-6 ? ' (raised: bright background)' : '')
+        + ' · ' + shot.evs.length + (shot.evs.length===1 ? ' exposure' : ' exposures');
+  if(p.length) s = 'ignored ' + p.join(', ') + '\n' + s;
+  return s;
+}
+
+function select(i, speakIt){
+  if(!shot || !shot.leds.length) return;
+  selIdx = i;
+  drawOverlay(); buildList(); showSel();
+  if(speakIt) say('number ' + (i+1) + ', ' + shot.leds[i].res.label);
+}
+
+function showSel(){
+  if(!shot.leds.length){
+    paintName('NO LIGHT', 'Nothing bright and isolated enough to be an indicator. Try "loose" in settings.', 'bad', '#000');
+    elStats.textContent = footText();
+    return;
+  }
+  const b = shot.leds[selIdx], r = b.res, m = b.meas;
+  paintName(r.label, '#'+(selIdx+1)+' — '+r.note, r.cls, r.swatch);
+  const st = m.pick.src || m.a;
+  elStats.textContent = statLine(r.hue, r.band, st, m.a)
+    + '\nblob ' + b.area + 'px  pad ' + b.pad + '  ev ' + (m.ev>0?'+':'') + m.ev
+    + '  of ' + shot.leds.length;
+}
+
+function speakSummary(){
+  const n = shot.leds.length;
+  if(!n){ say('no lights found'); return; }
+  const counts = {}, order = [];
+  shot.leds.forEach(b=>{
+    const k = b.res.label.toLowerCase();
+    if(counts[k]===undefined){ counts[k]=0; order.push(k); }
+    counts[k]++;
+  });
+  const parts = order.map(k => counts[k]>1 ? counts[k]+' '+k : 'one '+k);
+  say(n + (n===1 ? ' light: ' : ' lights: ') + parts.join(', '));
+}
+
+function renameAll(){
+  if(!shot) return;
+  shot.leds.forEach(b=> b.res = nameBlob(b));
+  drawOverlay(); buildList(); showSel();
+}
+
 /* ---------- speech ---------- */
 function maybeSpeak(label, cls){
   if(label === stableName) stableCount++; else { stableName = label; stableCount = 1; }
   if(stableCount !== 3) return;                      // fire once, after 3 agreeing frames
   if(label === spokenName) return;
   spokenName = label;
-  say((cls === 'ok' || label.includes(' OR ')) ? label : label + ', uncertain');
+  say((cls === 'ok' || label.indexOf(' OR ') > 0) ? label : label + ', uncertain');
 }
 function say(text){
   if(!speakOn || !window.speechSynthesis) return;
   try{ speechSynthesis.cancel();
-       const u = new SpeechSynthesisUtterance(text.toLowerCase());
+       const u = new SpeechSynthesisUtterance(String(text).toLowerCase());
        u.rate = 1.05; speechSynthesis.speak(u); }catch(e){}
 }
 
 /* ---------- interaction ---------- */
-cam.addEventListener('click', ()=>{
+cam.addEventListener('click', ev=>{
+  if(mode==='scan'){
+    const rect = cam.getBoundingClientRect();
+    const px = ev.clientX-rect.left, py = ev.clientY-rect.top;
+    let bi=-1, bd=1e9;
+    shot.leds.forEach((b,i)=>{
+      if(!b.hit) return;
+      const d = Math.hypot(b.hit.x-px, b.hit.y-py);
+      if(d < b.hit.r && d < bd){ bd=d; bi=i; }
+    });
+    if(bi>=0) select(bi, true);
+    return;
+  }
   frozen = !frozen;
   $('frozen').classList.toggle('on', frozen);
   if(frozen){ spokenName=''; say(elName.textContent); }
 });
+
+$('shutter').addEventListener('click', e=>{
+  e.stopPropagation();
+  if(mode==='scan') toLive(); else scan();
+});
+function paintShutter(){
+  const b=$('shutter');
+  b.textContent = (mode==='scan') ? 'LIVE' : 'SCAN';
+  b.classList.toggle('on', mode==='scan');
+}
+
 $('bSpeak').addEventListener('click', e=>{
   e.stopPropagation(); speakOn=!speakOn; save('dalton.speak',speakOn);
   $('bSpeak').classList.toggle('off', !speakOn);
@@ -435,6 +933,7 @@ $('bMode').addEventListener('click', e=>{
   simple = !simple; save('dalton.simple', simple);
   paintMode();
   spokenName=''; stableCount=0;            // re-announce in the new vocabulary
+  if(mode==='scan') renameAll();           // the stored readings are still good
 });
 function paintMode(){
   const b=$('bMode');
@@ -455,6 +954,22 @@ document.querySelectorAll('[data-size]').forEach(b=>{
 function markSizes(){
   document.querySelectorAll('[data-size]').forEach(b=>
     b.classList.toggle('sel', Math.abs(parseFloat(b.dataset.size)-sampleFactor) < 1e-6));
+}
+document.querySelectorAll('[data-sens]').forEach(b=>{
+  b.addEventListener('click', ()=>{ sens=b.dataset.sens; save('dalton.sens',sens); markSens(); });
+});
+function markSens(){
+  document.querySelectorAll('[data-sens]').forEach(b=> b.classList.toggle('sel', b.dataset.sens===sens));
+}
+$('brBtn').addEventListener('click', ()=>{
+  bracketOn = !bracketOn; save('dalton.bracket', bracketOn); markBracket();
+});
+function markBracket(){
+  const b=$('brBtn');
+  const able = !!(caps && caps.exposureCompensation);
+  b.textContent = !able ? 'n/a' : (bracketOn ? 'on' : 'off');
+  b.classList.toggle('sel', able && bracketOn);
+  b.disabled = !able;
 }
 
 /* ---------- camera controls ---------- */
@@ -480,6 +995,7 @@ function buildCamControls(){
         .catch(()=>{ btn.textContent='failed'; });
     });
   } else { btn.textContent='n/a'; btn.disabled=true; }
+  markBracket();
 }
 
 /* ---------- boundary calibration ---------- */
@@ -496,14 +1012,18 @@ function buildBounds(){
     const bump = d => () => {
       BOUNDS[i] = norm(BOUNDS[i]+d); save('dalton.bounds', BOUNDS);
       row.querySelector('.val').textContent = BOUNDS[i]+'°';
+      if(mode==='scan') renameAll();
     };
     m5.onclick=bump(-5); m1.onclick=bump(-1); p1.onclick=bump(1); p5.onclick=bump(5);
     host.appendChild(row);
   });
 }
-$('resetB').addEventListener('click', ()=>{ BOUNDS=DEF_BOUNDS.slice(); save('dalton.bounds',BOUNDS); buildBounds(); });
+$('resetB').addEventListener('click', ()=>{
+  BOUNDS=DEF_BOUNDS.slice(); save('dalton.bounds',BOUNDS); buildBounds();
+  if(mode==='scan') renameAll();
+});
 
-markSizes(); buildBounds(); paintMode();
+markSizes(); markSens(); markBracket(); buildBounds(); paintMode(); paintShutter();
 $('bSpeak').classList.toggle('off', !speakOn);
 if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
   $('err').textContent = 'This browser exposes no camera API. Open the page over http://localhost or https://.';

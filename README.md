@@ -93,3 +93,63 @@ matter, so it gets its own name instead of being swallowed by GREEN.
 
 Exposure and white-balance lock are only offered if the camera reports them; many
 Android cameras expose exposure compensation but not manual white balance.
+
+## Scan mode — naming every LED in one picture
+
+`SCAN` freezes a frame and names each light in it; `LIVE` goes back to the reticle.
+Each light gets a numbered ring on the picture and a row in the list below it. Tap a
+ring or a row to select it — the big readout, the hue and the stats then describe that
+one light, which is how you report a hue for calibration.
+
+### How it finds them
+
+No OpenCV. It would be about 9 MB of WebAssembly, vendored locally because this app is
+offline, to get a connected-components pass that is fifty lines of JavaScript — and it
+would not touch the part that is actually hard. Finding the LEDs is the easy half:
+
+1. **Threshold** on value at a fraction of the frame's brightest point. LEDs are the
+   brightest things in frame and their cores clip, so they stand out.
+2. **Connected components**, 8-connected, iterative — recursion would blow the stack on
+   a blob of a few thousand pixels.
+3. **Pad outwards** from each blob and read the colour *there*. This is the whole point.
+   A clipped core carries no hue (see above); the unclipped fringe around it does. The
+   padding stops halfway to the nearest neighbour, and pixels labelled as a *different*
+   blob are skipped, so two adjacent LEDs cannot bleed into each other.
+4. **Name it** with exactly the same code the live reticle uses — one implementation of
+   the bands, the simplified buckets and the hedging, so the two modes can never
+   disagree.
+
+### What it deliberately does not do
+
+**It does not drop a doubtful light.** A spare false positive is cheap to ignore on
+screen; a missing LED is not. So a blob whose surroundings are nearly as bright as it
+is gets *flagged* ("background nearly as bright") rather than discarded, and the
+default sensitivity is the loose one.
+
+**It does not cap silently.** The footer says what was ignored and why, the threshold it
+used, and how many exposures it took. A silent cap reads as "that is everything".
+
+### Bright backgrounds
+
+A lit white wall behind the LEDs used to defeat it completely: at a low threshold the
+wall merges into one giant region that swallows the LEDs inside it, and at a high one
+the LEDs survived detection only to be thrown out as "not isolated". Both are fixed.
+If any region comes back larger than a tenth of the frame, the threshold steps up
+(0.82 → 0.90 → 0.95 of peak) until nothing is oversized; the footer says when it did.
+Verified against a synthetic wall at value 200 behind LEDs clipping at 255: two LEDs,
+correct hues, at every sensitivity setting.
+
+### Exposure bracketing
+
+If the camera exposes `exposureCompensation`, SCAN also takes two darker shots and reads
+each light from whichever one left the most usable fringe. Darker means less clipping
+means more hue survives. It costs about a second; turn it off in settings. Without it,
+or if the camera refuses, it falls back to the single frame.
+
+### Known limits
+
+- A window or a lamp is bright too. It gets found and usually named TOO BRIGHT. Ignore it.
+- Two LEDs closer than a few pixels merge into one blob and get one name.
+- A reflection of an LED on glossy plastic is, to the camera, an LED.
+- None of this has been tested against a real camera yet, only against synthetic scenes
+  with realistic clipping profiles.
