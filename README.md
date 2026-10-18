@@ -235,13 +235,38 @@ enters the peak and never forms a blob. Verified against a synthetic wall at val
 behind LEDs clipping at 255, and against a blown-out window beside five LEDs: correct
 names at every sensitivity, no extras.
 
+### Dividing out the illuminant
+
+A camera in a dark room opens up and also warms up. On the two real captures the grey
+things in frame come back R/G 1.12 in the dark corner against 0.95 in the lit room, and
+that cast on its own dragged three green LEDs to hue 75, 82 and 94 — named YELLOW, with
+0.99 agreement. Confidently wrong is the worst answer this app can give.
+
+The scene's own greys are the reference. Every pixel bright enough to trust, not
+clipped, and nearly neutral is averaged, and that average is called white; hue and
+saturation are then read with the two gains divided out. Clipping and darkness are
+still judged on the raw reading, because those are facts about the sensor rather than
+about the light. The gains are clamped to ±35%, and a frame with too little grey in it
+— a close-up of a black panel — gets no correction rather than an invented one.
+
+**Detection never sees the corrected pixels.** Scaling values before thresholding
+changes which blobs exist, and on the lit capture that turned seven LEDs into
+twenty-four rings of wood grain.
+
+On the dark capture this moves the three LEDs to hue 94, 100 and 135: two named GREEN
+and one hedged YELLOW OR GREEN, against none right before. On the lit capture it is
+very nearly a no-op — hues 150-163 become 151-164 — which is the point. A correction
+that only fires where it is needed is one you can leave switched on.
+
 ### Driving the camera
 
-A long exposure destroys the answer before any code sees it. In a dark corner the
-camera opens up until all three channels saturate, and the core of a green LED comes
-back [236, 255, 205] — saturation 0.20, hue 58 — which is confidently named YELLOW.
-Nothing downstream recovers that. Subtracting the ambient does not help; the ambient is
-[7, 6, 6]. The same model of LED in a lit room reads hue 150 to 163 and names correctly.
+Dividing the illuminant out fixes the colour cast, but not the exposure underneath it.
+In a dark corner the camera opens up until all three channels saturate: the core of a
+green LED comes back [236, 255, 205], saturation 0.20, and even after correction its
+fringe reads hue 94 to 135 where the same part in a lit room reads 150 to 163. The
+information is thinner, and one of the three LEDs still only manages YELLOW OR GREEN.
+Subtracting the ambient does not help; the ambient is [7, 6, 6]. The fix has to happen
+before the shutter.
 
 So SCAN does not accept the camera's exposure. It asks for `exposureMode: "manual"` and
 steps `exposureTime` down by a factor of four, three times; a camera with no manual mode
@@ -269,9 +294,12 @@ like an algorithm bug.
 - A dim LED beside a bright one is lost: the bright one sets the threshold. That is the
   deliberate cost of a relative threshold, and it is in the test output as a
   `KNOWN LIMIT` row rather than quietly passing.
+- A scene with no greys in it gets no illuminant estimate, so a strong cast over a
+  wholly coloured subject stays uncorrected. Saying nothing beats guessing.
 - **Whether this phone honours the exposure request is not yet known.** The code asks
   and the log reports; until a dark-room capture comes back with the series actually
-  getting darker, the dark-room fix is written but unproven.
+  getting darker, that half of the dark-room fix is written but unproven. The
+  illuminant half is proven, on `corpus/0002-dark-switch`.
 
 ## Running it, and handing frames back
 
