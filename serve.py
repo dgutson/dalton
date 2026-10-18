@@ -50,17 +50,28 @@ class Handler(SimpleHTTPRequestHandler):
         seq = 1 + max([int(f[:4]) for f in os.listdir(FRAMES)
                        if f[:4].isdigit()] or [0])
         stem = os.path.join(FRAMES, '%04d' % seq)
-        meta['bytes'] = len(raw)
         meta['stem'] = '%04d' % seq
-        with open(stem + '.rgba', 'wb') as f:
-            f.write(raw)
+        w, h = meta.get('w', 0), meta.get('h', 0)
+        plane = w * h * 4
+
+        # The body carries the whole exposure series: the displayed frame first, then
+        # each darker one. Every selection rule can then be retried offline instead of
+        # costing another trip to the phone.
+        evs = meta.get('evs') or [0]
+        ok = plane > 0 and len(raw) % plane == 0 and len(raw) // plane == len(evs)
+        names = []
+        for i in range(len(raw) // plane if ok else 1):
+            suffix = '' if i == 0 else '-e%d' % i
+            with open(stem + suffix + '.rgba', 'wb') as f:
+                f.write(raw[i * plane:(i + 1) * plane])
+            names.append(meta['stem'] + suffix)
+        meta['bytes'] = len(raw)
+        meta['planes'] = names
         with open(stem + '.json', 'w') as f:
             json.dump(meta, f, indent=1)
 
-        w, h = meta.get('w', 0), meta.get('h', 0)
-        ok = (w * h * 4 == len(raw))
-        print('saved %s.rgba  %dx%d  %.1f MB  %d led(s)%s'
-              % (stem, w, h, len(raw) / 1e6, len(meta.get('leds', [])),
+        print('saved %s  %dx%d  %d exposure(s)  %.1f MB  %d led(s)%s'
+              % (stem, w, h, len(names), len(raw) / 1e6, len(meta.get('leds', [])),
                  '' if ok else '  <-- SIZE MISMATCH'), flush=True)
 
         out = json.dumps({'ok': ok, 'saved': meta['stem']}).encode()

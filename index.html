@@ -600,6 +600,7 @@ let bracketOn = load('dalton.bracket', true);
 let ema=null, wakeLock=null;
 let mode='live', shot=null, busy=false;
 let speakOn = load('dalton.speak', true);
+let exlog = null;
 let stableName='', stableCount=0, spokenName='';
 
 /* ---------- camera ---------- */
@@ -766,25 +767,116 @@ function grabFrame(){
 
 // The native exposure plus, if the camera allows it, two darker shots. Darker means
 // less clipping, which means more fringe left to read a hue from.
+// Drive the camera. Do not accept the exposure it chose for the room.
+//
+// A camera metering a room puts an LED far over the top of its range. The core blows
+// to white and takes the colour with it. Measured on two real captures of green LEDs:
+// in a bright room on a short exposure they read hue 148-176 — correct. In a dark
+// corner on a long exposure the same kind of LED read 58-96 — lime, named YELLOW, and
+// with HIGH agreement, so confidently wrong. The core there was [236,255,205]:
+// saturation 0.20, every channel pushed near the top. Nothing downstream recovers
+// that. The only fix is to take a darker picture.
+//
+// Darker also separates emitters from reflectors. Both scale the same way with
+// exposure, but an LED is clipping with radiance to spare, so it stays pinned at 255
+// while a specular highlight — which was only just reaching 245 — falls away.
 async function bracket(){
-  const frames = [{ev:0, data:grabFrame().data}];
-  const r = caps.exposureCompensation;
-  if(!bracketOn || !r || !track) return frames;
-  let orig = 0;
-  try{ orig = track.getSettings().exposureCompensation ?? 0; }catch(e){ return frames; }
-  const span = orig - r.min;
-  if(span <= 0.01) return frames;
-  for(const s of [orig - span*0.5, r.min]){
-    try{
-      await track.applyConstraints({advanced:[{exposureCompensation:s}]});
-      await settle(450);                       // let auto-exposure actually converge
-      frames.push({ev:+(s-orig).toFixed(2), data:grabFrame().data});
-    }catch(e){ break; }
-  }
-  try{ await track.applyConstraints({advanced:[{exposureCompensation:orig}]}); }catch(e){}
-  return frames;
+  const series = [{ev:0, mode:'auto', data:grabFrame().data}];
+  exlog = {mode:'none', caps:{}, settings:[], note:''};
+  try{
+    exlog.caps = {
+      exposureMode: caps.exposureMode || null,
+      exposureTime: caps.exposureTime || null,
+      exposureCompensation: caps.exposureCompensation || null,
+      iso: caps.iso || null,
+      whiteBalanceMode: caps.whiteBalanceMode || null
+    };
+  }catch(e){}
+  if(!bracketOn || !track) return series;
+
+  const settings = () => { try{ return track.getSettings(); }catch(e){ return {}; } };
+  const s0 = settings();
+  exlog.settings.push({step:'start', ev:0, ...pick(s0)});
+
+  // Manual exposure where the camera allows it: a real exposure time is a far bigger
+  // lever than the few stops of bias that exposureCompensation offers.
+  const em = caps.exposureMode, et = caps.exposureTime;
+  const canManual = em && em.indexOf && em.indexOf('manual') >= 0 && et && et.max > et.min;
+
+  try{
+    if(canManual){
+      exlog.mode = 'manual';
+      const base = s0.exposureTime || et.max;
+      const lo = et.min;
+      const con = {exposureMode:'manual'};
+      if(caps.iso) con.iso = caps.iso.min;
+      await track.applyConstraints({advanced:[con]});
+      // Four steps down to the shortest the camera will take.
+      for(let i=1;i<=3;i++){
+        const want = Math.max(lo, base / Math.pow(4, i));
+        await track.applyConstraints({advanced:[{exposureTime: want}]});
+        await settle(380);
+        const got = settings();
+        series.push({ev:-i, mode:'manual', want, got:got.exposureTime, data:grabFrame().data});
+        exlog.settings.push({step:'manual'+i, want, ...pick(got)});
+        if(got.exposureTime !== undefined && got.exposureTime <= lo*1.01) break;
+      }
+    }else{
+      const r = caps.exposureCompensation;
+      if(!r) { exlog.note = 'no exposure control at all'; return series; }
+      exlog.mode = 'compensation';
+      const orig = s0.exposureCompensation ?? 0;
+      const span = orig - r.min;
+      if(span <= 0.01){ exlog.note = 'already at minimum compensation'; return series; }
+      let i = 0;
+      for(const v of [orig - span*0.34, orig - span*0.67, r.min]){
+        i++;
+        await track.applyConstraints({advanced:[{exposureCompensation:v}]});
+        await settle(380);
+        const got = settings();
+        series.push({ev:+(v-orig).toFixed(2), mode:'comp', want:v,
+                     got:got.exposureCompensation, data:grabFrame().data});
+        exlog.settings.push({step:'comp'+i, want:v, ...pick(got)});
+      }
+    }
+  }catch(e){ exlog.note = 'failed: ' + (e.name||e); }
+
+  // Always hand the camera back the way it was found.
+  try{
+    if(canManual){
+      const back = {exposureMode: s0.exposureMode || 'continuous'};
+      await track.applyConstraints({advanced:[back]});
+    }else{
+      await track.applyConstraints({advanced:[{exposureCompensation: s0.exposureCompensation ?? 0}]});
+    }
+  }catch(e){}
+
+  // Did it actually get darker? If the camera ignored us, say so rather than
+  // pretending the series means something.
+  exlog.medians = series.map(f => median64(f.data));
+  if(series.length > 1 && exlog.medians[series.length-1] > exlog.medians[0]*0.75)
+    exlog.note += (exlog.note?' · ':'') + 'camera barely responded to the exposure request';
+  return series;
 }
 
+function pick(s){
+  return {exposureMode:s.exposureMode, exposureTime:s.exposureTime,
+          exposureCompensation:s.exposureCompensation, iso:s.iso,
+          whiteBalanceMode:s.whiteBalanceMode, colorTemperature:s.colorTemperature};
+}
+
+// Cheap brightness summary of a frame, on a 64-step subsample.
+function median64(data){
+  const h = new Uint32Array(256); let n=0;
+  for(let i=0;i<data.length;i+=4*64){
+    const R=data[i],G=data[i+1],B=data[i+2];
+    h[R>G?(R>B?R:B):(G>B?G:B)]++; n++;
+  }
+  let c=0; for(let v=0;v<256;v++){ c+=h[v]; if(c*2>=n) return v; }
+  return 0;
+}
+
+/* ---------- scan ---------- */
 async function scan(){
   if(busy || !video.videoWidth) return;
   busy = true; $('shutter').disabled = true;
@@ -796,13 +888,22 @@ async function scan(){
   shotc.width=vw; shotc.height=vh;
   shotc.getContext('2d').drawImage(video,0,0,vw,vh);
 
-  let frames, det, out;
+  let frames, det = null, out;
   const t0 = performance.now();
   let tBracket = 0;
   try{
     frames = await bracket();
     tBracket = performance.now() - t0;
-    det = detectBlobs(frames[0].data, vw, vh, sens);
+    // Darkest first. The darkest exposure that still finds a light is the one
+    // where reflections have fallen away and only emitters are left.
+    const tries = [];
+    for(let i=frames.length-1;i>=0;i--){
+      const d = detectBlobs(frames[i].data, vw, vh, sens);
+      tries.push({i, ev:frames[i].ev, n:d.blobs.length, peak:d.peak, T:d.T});
+      if(!det && d.blobs.length) det = d;
+    }
+    if(!det) det = detectBlobs(frames[0].data, vw, vh, sens);
+    det.tries = tries;
     out = measureBlobs(frames, det, vw, vh);
   }catch(e){
     $('frozen').classList.remove('on'); $('frozen').textContent='FROZEN';
@@ -813,6 +914,7 @@ async function scan(){
 
   shot = { W:vw, H:vh, leds:out.kept, drop:out.drop, T:det.T, minSat:det.minSat,
            peak:det.peak, nCol:det.nCol, nRaw:det.nRaw, evs:frames.map(f=>f.ev),
+           tries:det.tries, exlog,
            frames,                               // kept for the debug upload
            // how long it actually took on real hardware, which no amount of
            // benchmarking on a laptop will tell you
@@ -945,12 +1047,14 @@ function footText(){
 // 127.0.0.1 is the Python process that served this page — but it is the only way the
 // algorithm can be tested against a real camera instead of synthetic images.
 function framePayload(){
-  const img = shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H);
+  const planes = (shot.frames && shot.frames.length)
+               ? shot.frames.map(f=>f.data)
+               : [shotc.getContext('2d').getImageData(0, 0, shot.W, shot.H).data];
   const meta = {
     w:shot.W, h:shot.H, T:shot.T, minSat:shot.minSat, peak:shot.peak,
     nCol:shot.nCol, evs:shot.evs,
     sens:sens, simple:simple, bounds:BOUNDS, drop:shot.drop, nRaw:shot.nRaw,
-    ms:shot.ms, msBracket:shot.msBracket,
+    ms:shot.ms, msBracket:shot.msBracket, tries:shot.tries, exposure:shot.exlog,
     caps:{ exposure: !!(caps && caps.exposureCompensation),
            wb: !!(caps && caps.whiteBalanceMode) },
     leds: shot.leds.map((b,i)=>{
@@ -966,8 +1070,12 @@ function framePayload(){
     })
   };
   const head = new TextEncoder().encode(JSON.stringify(meta) + '\n');
-  const body = new Uint8Array(head.length + img.data.length);
-  body.set(head, 0); body.set(img.data, head.length);
+  let total = head.length;
+  for(const p of planes) total += p.length;
+  const body = new Uint8Array(total);
+  body.set(head, 0);
+  let at = head.length;
+  for(const p of planes){ body.set(p, at); at += p.length; }
   return body;
 }
 
