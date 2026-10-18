@@ -14,6 +14,14 @@ back silently.
 "verified": false. That seed is a convenience, NOT ground truth — open the rendered
 PNG, check every LED by eye, fix the list, then set verified to true. An unverified
 entry is skipped by the tests rather than trusted.
+
+An entry may also carry
+
+    "known_limit": {"strict": "why this tier cannot pass on this capture"}
+
+which stops that one tier failing the run while still printing its real score and the
+reason underneath it. It is the same promise as EXPECT_FAIL in tools/scenes.py: a
+documented limitation, never a way to quiet a regression.
 """
 import gzip, json, os, shutil, sys
 

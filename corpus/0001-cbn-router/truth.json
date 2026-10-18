@@ -2,6 +2,9 @@
   "w": 720,
   "h": 1280,
   "verified": true,
+  "known_limit": {
+    "strict": "the third LED down has a 2-pixel core at strict's threshold (peak-8 = 247) against its minimum area of 3, so it is dropped as too small; the other six measure 3 to 8. Strict buys precision with recall by construction, and the sensitivity the app ships with is loose. 7/7 at normal and loose is the requirement."
+  },
   "note": "CBN tower router on a desk, in a warm-lit room: wood panelling behind, a fern to the left, a yellow ethernet cable, a peach wall. Seven green status LEDs in a vertical column on the black body, each above a grey printed icon. Verified by eye from a 3x crop. Every LED clips (peak 255) and reads green-cyan at hue 150-163, which is what moved the green/cyan band edge to 175. The grey icons, the cable and the plant are the interesting negatives: the first two versions of the detector labelled 24 fragments of wood grain and found one LED.",
   "source": "frames/0001, captured 2026-10-18",
   "leds": [

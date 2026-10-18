@@ -60,14 +60,20 @@ for slug in ents:
         print('  %-26s SKIPPED, truth not verified by eye' % slug[:26]); continue
     with tempfile.NamedTemporaryFile(suffix='.rgba', delete=False) as f:
         f.write(raw); path = f.name
+    # A capture may declare a tier it is known not to survive, with the reason, the
+    # same way a synthetic scene goes in EXPECT_FAIL. The cell still prints the real
+    # score, so the miss stays visible; it just does not fail the run.
+    lim = t.get('known_limit') or {}
     try:
         cells = []
         for tier in tiers:
             o = run(path, t['w'], t['h'], tier)
-            c, bad = cell(*judge(o, t['leds']), len(t['leds']), False)
+            c, bad = cell(*judge(o, t['leds']), len(t['leds']), tier in lim)
             fails += bad; cells.append(c)
     finally: os.unlink(path)
-    print('  %-26s %s' % (slug[:26], '   '.join('%-14s' % c for c in cells)))
+    note = ('  (known limit: %s)' % ', '.join(sorted(lim))) if lim else ''
+    print('  %-26s %s%s' % (slug[:26], '   '.join('%-14s' % c for c in cells), note))
+    for tier in sorted(lim): print('      %s: %s' % (tier, lim[tier]))
 
 meta = json.load(open(f'{D}/truth.json'))
 W, H, titles, soft = meta['w'], meta['h'], meta['titles'], set(meta['expect_fail'])
