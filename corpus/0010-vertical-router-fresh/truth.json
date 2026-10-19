@@ -1,0 +1,44 @@
+{
+  "w": 720,
+  "h": 1280,
+  "verified": true,
+  "leds": [
+    {
+      "y": 550,
+      "x": 233,
+      "expect": "GREEN"
+    },
+    {
+      "y": 597,
+      "x": 235,
+      "expect": "GREEN"
+    },
+    {
+      "y": 642,
+      "x": 237,
+      "expect": "GREEN"
+    },
+    {
+      "y": 685,
+      "x": 240,
+      "expect": "GREEN"
+    },
+    {
+      "y": 727,
+      "x": 242,
+      "expect": "GREEN"
+    },
+    {
+      "y": 766,
+      "x": 244,
+      "expect": "GREEN"
+    },
+    {
+      "y": 805,
+      "x": 246,
+      "expect": "GREEN"
+    }
+  ],
+  "source": "frames/0014 auto plane, captured 2026-10-19, camera probe, torch unavailable",
+  "note": "The tall black router of 0004-vertical-router, re-shot wider and from further back: the whole shelf is in frame, with the fern, the ukulele, the yellow ethernet cable, the blue rubber blower bulb and a wooden sculpture. Seven green LEDs in a column, all seven found and named GREEN at hue 159-165 at every tier, with ZERO extras. WHY THIS ENTRY MATTERS: it is the first capture the detector had never been shown while it was being tuned. The yellow cable and the blue bulb that were the standing false positives of 0004 are both in this frame, and chromatic uniqueness drops them unprompted - the drop counters show one blob killed as 'the same colour as its surroundings' at all three tiers. A rule measured on eight captures working on the ninth is the only evidence that it is a rule and not a fit. It came from a camera probe, not a scan, so capture.json carries the whole lever survey: torch not offered, ISO inert at the sensor floor of 50, and both darkening steps black at median 2. The darkened planes are not stored because they hold nothing - see 0009-desk-no-leds for a pair that does."
+}

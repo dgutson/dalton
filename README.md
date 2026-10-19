@@ -418,6 +418,23 @@ moves, and the scale it moves on is not the one printed on it**. Both requests
 overshot, in the same direction, by four to eight times. ISO is inert. Measuring the
 frame after each step, which the ladder now does, is the whole defence.
 
+A second probe, pointed at the router, then undid half of that table and taught two
+things that apply to any multi-frame scheme:
+
+- **The steps were a chain, not a set.** Nothing reset the camera between them, so
+  `exptime-half` left it in manual mode — where this phone reports
+  `exposureMode: "none"` and returns a frame with a median of **2** — and the `ev-min`
+  step that followed inherited it. What had been recorded twice as "−2 EV gives 0.12x"
+  was really "manual mode is still on". **`exposureCompensation` had never actually
+  been measured.** The probe now restores continuous mode and the original
+  compensation before every step.
+- **Handheld frames drift, and an LED is smaller than the drift.** Between two
+  consecutive grabs half a second apart, `frames/0014` moved 10px across and 6px down.
+  Every LED fell out of its 9×9 comparison patch and read as having gone dark — which
+  looks exactly like a reflector. `tools/probe.py` now registers the pair first, by
+  *correlation*: plain absolute difference is dominated by the eightfold brightness
+  gap and picked a 20px shift that was simply wrong.
+
 Before anything else is built on a camera parameter, *Settings -> Probe what this
 camera can do* walks every lever the camera claims to have, one at a time, and saves
 both the numbers and the frames. `python3 tools/probe.py frames/NNNN` reads it back
@@ -447,9 +464,12 @@ worth 129. Cut the light to an eighth and the wall collapses to 15 while the LED
 merely no longer clipped. The ratio therefore measures **hidden headroom**, and
 "brighter than the sensor could say" is very close to what "emitting" means. The probe
 prints that ratio as a multiple of what the whole scene kept, so a reflector reads 1
-by construction and an LED should read several. This has not yet been confirmed on a
-frame that actually contains an LED — the first probe was pointed at a desk — so it is
-written down here as the plan, not as a result.
+by construction, and **that half is now measured**: every blob on the no-LED desk of
+`corpus/0009-desk-no-leds` kept 0.88× to 1.19× of what the whole scene kept, tight
+around 1.0, which is what the physics says a reflector must do. An LED should read
+several, and that half is still open. It needs a darkening step that lands between
+"did nothing" and "black", which on this camera means `exposureCompensation` while the
+camera stays in continuous mode — the one lever the chained-steps bug had been hiding.
 
 At the darkest usable setting it takes two more shots. A quickly blinking LED is simply
 absent from some frames, which is how one of three green LEDs was being lost; among
@@ -568,6 +588,11 @@ stops tomorrow's fix from breaking it.
   colour on a laptop sticker and the amber edge of a glass bottle. It carries a second
   plane, the same scene at an eighth of the exposure, so the headroom test can be built
   against it offline.
+- `0010-vertical-router-fresh` — the router of `0004` re-shot wider, and **the first
+  capture the detector had never seen while it was being tuned**. 7/7 GREEN at every
+  tier with zero extras, including the yellow cable and the blue bulb that were `0004`'s
+  standing false positives. A rule measured on eight captures working on the ninth is
+  the only evidence it is a rule and not a fit.
 
 To add one:
 

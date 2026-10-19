@@ -1328,9 +1328,26 @@ async function probeCamera(){
   try{ log.settings0 = pick(track.getSettings()); }catch(e){}
   const planes=[], evs=[], vw=video.videoWidth, vh=video.videoHeight;
 
+  // Every step must start from the camera as it was found, or the steps are a chain
+  // and not a set of independent measurements. Without this, exptime-half leaves the
+  // camera in manual mode — where this phone reports exposureMode "none" and returns
+  // a frame with a median of 2 — and the ev-min step that follows inherits it. What
+  // got recorded twice as "exposureCompensation -2 gives 0.12x" was really "manual
+  // mode is still on, and the compensation changed nothing". exposureCompensation
+  // had never actually been measured.
+  async function reset(){
+    try{ await track.applyConstraints({advanced:[{exposureMode:'continuous'}]}); }catch(e){}
+    if(caps.exposureCompensation){
+      const ev0 = log.settings0.exposureCompensation || 0;
+      try{ await track.applyConstraints({advanced:[{exposureCompensation: ev0}]}); }catch(e){}
+    }
+    await settle(450);
+  }
+
   async function step(name, constraint){
     let applied = true, err = null;
     if(constraint){
+      await reset();
       try{ await track.applyConstraints({advanced:[constraint]}); }
       catch(e){ applied = false; err = (e && e.name) || String(e); }
     }
@@ -1355,21 +1372,42 @@ async function probeCamera(){
       log.steps.push({name:'torch-on', want:{torch:true}, applied:false,
                       err:'not in getCapabilities()', got:{}, stats:null});
     }
-    // ISO is the untried axis, and the clean one: a straight multiplier on
-    // sensitivity. It was only ever used here by accident, slammed to its minimum as
-    // a side effect of the exposure ladder, which is what blacked the frames out.
-    if(caps.iso && caps.iso.max > caps.iso.min){
-      const mid = Math.round(Math.sqrt(caps.iso.min * caps.iso.max));
-      await step('iso-mid-' + mid, {iso: mid});
-      await step('iso-min-' + caps.iso.min, {iso: caps.iso.min});
+    // ORDER MATTERS, and it is not the order the levers were thought of in. Every
+    // step costs about a second with the reset, the probe is handheld, and the
+    // frames drift — 10px across in half a second, measured. Whatever is going to be
+    // compared against `auto` should therefore be taken as soon after it as
+    // possible, so the most promising lever goes first and the known-inert ones go
+    // last.
+    //
+    // Compensation leads because it is the only cut that stays in CONTINUOUS mode:
+    // the camera keeps auto-exposing and is merely biased, which is the one way to
+    // ask for less light without the exposure collapsing to black.
+    if(caps.exposureCompensation){
+      const evmin = caps.exposureCompensation.min;
+      if(evmin < -0.9) await step('ev-1', {exposureCompensation: -1});
+      await step('ev-min', {exposureCompensation: evmin});
     }
+    // Manual exposure time is next, and it has already failed twice: this phone
+    // answers the request with exposureMode "none" and a frame median of 2.
     if(caps.exposureTime && caps.exposureTime.max > caps.exposureTime.min){
       const now = log.settings0.exposureTime || caps.exposureTime.max;
       const half = Math.max(caps.exposureTime.min, now/2);
       await step('exptime-half', {exposureMode:'manual', exposureTime: half});
     }
-    if(caps.exposureCompensation)
-      await step('ev-min', {exposureCompensation: caps.exposureCompensation.min});
+    // ISO last. It looks like the clean lever — a straight multiplier on sensitivity
+    // — and on this phone it does nothing at all, because auto had already pinned it
+    // to the sensor floor of 50 before the probe asked for anything.
+    if(caps.iso && caps.iso.max > caps.iso.min){
+      const mid = Math.round(Math.sqrt(caps.iso.min * caps.iso.max));
+      await step('iso-mid-' + mid, {iso: mid});
+      await step('iso-min-' + caps.iso.min, {iso: caps.iso.min});
+    }
+    // One more untouched frame at the end. The difference between this and the first
+    // is how far the hands moved over the whole probe, which is the error bar on
+    // every comparison above. It needs the reset too, or it measures the last ISO
+    // request as well as the drift.
+    await reset();
+    await step('auto-again', null);
   }catch(e){ log.error = (e && e.message) || String(e); }
 
   // Always hand the camera back the way it was found.

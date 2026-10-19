@@ -105,10 +105,27 @@ def emitter_test(meta, stem, tier='normal'):
         # may really be worth thousands; the room at 129 is worth 129. Cut the light to
         # an eighth and the room collapses while the LED is merely no longer clipped.
         # So the ratio measures hidden headroom, which is what "is it emitting" means.
+        # The darkest frame that still HOLDS something, and that is actually darker
+        # than auto. Two traps here, both hit for real. A frame with a median of 2
+        # is black, not dark, and comparing against it measures nothing. And a step
+        # that did not move the picture - ISO on this phone - is not a second
+        # exposure at all; falling back to one silently reported LEDs as reflectors.
+        base = stats['auto']['mean']
         dark = [(st['mean'], n) for n, st in stats.items()
-                if st and n in idx and n != 'auto' and st['med'] > 2]
+                if st and n in idx and n != 'auto' and st['med'] > 8
+                and st['mean'] < base * 0.8]
         if not dark:
-            print('\nEMITTER TEST: skipped, no usable second exposure in this probe.')
+            black = [n for n, st in stats.items()
+                     if st and n != 'auto' and st['med'] <= 8]
+            inert = [n for n, st in stats.items()
+                     if st and n != 'auto' and st['med'] > 8
+                     and st['mean'] >= base * 0.8]
+            print('\nEMITTER TEST: no usable second exposure.')
+            if black: print('  came back BLACK (median <= 8): ' + ', '.join(black))
+            if inert: print('  did not move the picture:       ' + ', '.join(inert))
+            print('  The cut has to land between those two. On this camera that means\n'
+                  '  exposureCompensation in CONTINUOUS mode; manual exposureTime goes\n'
+                  '  straight to black and ISO does nothing.')
             return
         other, kind = min(dark)[1], 'exposure'
     import numpy as np
@@ -119,6 +136,21 @@ def emitter_test(meta, stem, tier='normal'):
         return np.fromfile(p, dtype=np.uint8).reshape(H, W, 4)[:, :, :3].astype(float)
 
     a_img, b_img = frame('auto'), frame(other)
+
+    # REGISTER FIRST. The probe is handheld and each step costs about half a second,
+    # so the frames drift. Measured on frames/0014: 10px across and 6px down between
+    # two consecutive grabs, which is more than an LED is wide - every LED fell out
+    # of its 9x9 patch and read as having gone dark, which looks exactly like a
+    # reflector. Comparing unregistered frames does not measure exposure, it measures
+    # the user's hands.
+    dy, dx, before = register(a_img, b_img)
+    if dy or dx:
+        b_img = np.roll(np.roll(b_img, -dy, axis=0), -dx, axis=1)
+    print('\n  registration: %+d px down, %+d px across  '
+          '(correlation %.3f, was %.3f unshifted)' % (dy, dx, before[1], before[0]))
+    if before[1] < 0.5:
+        print('  WEAK MATCH - the two frames may not show the same thing. Treat the '
+              'rest\n  of this table as unreliable.')
     scene = (stats[other]['mean'] / stats['auto']['mean']) if stats['auto']['mean'] else 1
 
     r = subprocess.run(['qjs', '--std', os.path.join(HERE, 'detect_test.js'),
@@ -169,6 +201,63 @@ def emitter_test(meta, stem, tier='normal'):
                'a router.')
 
 
+def register(a, b, span=300):
+    """Integer shift of b that best lines it up with a, by CORRELATION.
+
+    Absolute difference is the obvious metric and it is useless here: the two frames
+    differ by a factor of eight in brightness, so the difference is dominated by the
+    exposure and barely moves with alignment. On frames/0013 it picked a 20px shift
+    that improved the residual by half a percent and was simply wrong. Normalised
+    correlation subtracts the mean and divides by the spread of each crop, so it
+    asks only whether the same EDGES are in the same places.
+    """
+    import numpy as np
+    H, W = a.shape[:2]
+    y0, x0 = H // 2 - span // 2, W // 2 - span // 2
+    A = a[y0:y0 + span, x0:x0 + span].max(2).astype(float)
+    A = A - A.mean()
+    na = float(np.sqrt((A * A).sum()))
+    B = b.max(2).astype(float)
+
+    def ncc(dy, dx):
+        C = B[y0 + dy:y0 + dy + span, x0 + dx:x0 + dx + span]
+        if C.shape != A.shape: return -1.0
+        C = C - C.mean()
+        d = na * float(np.sqrt((C * C).sum()))
+        return float((A * C).sum()) / d if d > 0 else -1.0
+
+    zero = ncc(0, 0)
+    best = (zero, 0, 0)
+    for stride, rng in ((4, 32), (1, 5)):
+        cy, cx = best[1], best[2]
+        for dy in range(cy - rng, cy + rng + 1, stride):
+            for dx in range(cx - rng, cx + rng + 1, stride):
+                c = ncc(dy, dx)
+                if c > best[0]: best = (c, dy, dx)
+    return best[1], best[2], (zero, best[0])
+
+
+def drift_note(meta):
+    """How far did the hands move over the whole probe? The error bar on everything."""
+    names, evs = meta.get('planes', []), meta.get('evs') or []
+    idx = {n: i for i, n in enumerate(evs) if i < len(names)}
+    if 'auto' not in idx or 'auto-again' not in idx: return
+    try:
+        import numpy as np
+    except ImportError:
+        return
+    W, H = meta['w'], meta['h']
+    def f(n):
+        p = os.path.join(ROOT, 'frames', names[idx[n]] + '.rgba')
+        return np.fromfile(p, dtype=np.uint8).reshape(H, W, 4)[:, :, :3].astype(float)
+    dy, dx, (z, c) = register(f('auto'), f('auto-again'))
+    d = (dy * dy + dx * dx) ** 0.5
+    print('\nHANDHELD DRIFT over the whole probe: %+d px down, %+d px across (%.0f px).'
+          % (dy, dx, d), end=' ')
+    print('An LED is a few px wide, so every pair above is registered before it is\n'
+          'compared.' if d >= 3 else 'Steady enough that registration barely matters.')
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
@@ -178,6 +267,10 @@ def main():
     meta = load(stem)
     caps_table(meta)
     steps_table(meta)
+    try:
+        drift_note(meta)
+    except Exception as e:
+        print('\n(drift not measured: %s)' % e)
     try:
         emitter_test(meta, stem)
     except ImportError:
